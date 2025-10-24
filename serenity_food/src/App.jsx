@@ -7,7 +7,7 @@ function App() {
   const [count, setCount] = useState(0);
 
   return (
-    <div className="mt-4">
+    <div className="mt-8">
       <MainApp />
     </div>
   );
