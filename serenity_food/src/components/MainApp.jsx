@@ -102,7 +102,7 @@ const MainApp = () => {
       }
     } catch (err) {
       console.error("Error fetching data:", err);
-      setError("Failed to connect to server. Make sure backend is running on ");
+      setError("Failed to connect to server");
     } finally {
       setLoading(false);
     }
