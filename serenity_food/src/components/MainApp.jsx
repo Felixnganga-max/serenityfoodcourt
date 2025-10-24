@@ -8,7 +8,7 @@ import { OutsideCatering } from "./OutsideCatering";
 
 // API Configuration
 const API_BASE_URL =
-  "http://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
+  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 // API Service
 const api = {
