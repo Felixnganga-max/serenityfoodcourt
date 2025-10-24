@@ -7,7 +7,8 @@ import { SalesReports } from "./SalesReports";
 import { OutsideCatering } from "./OutsideCatering";
 
 // API Configuration
-const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
+const API_BASE_URL =
+  "http://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 // API Service
 const api = {
@@ -101,9 +102,7 @@ const MainApp = () => {
       }
     } catch (err) {
       console.error("Error fetching data:", err);
-      setError(
-        "Failed to connect to server. Make sure backend is running on http://localhost:5000"
-      );
+      setError("Failed to connect to server. Make sure backend is running on ");
     } finally {
       setLoading(false);
     }
