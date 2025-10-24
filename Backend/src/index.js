@@ -45,7 +45,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
+// 404 handler (optional)
 // app.use("*", (req, res) => {
 //   res.status(404).json({
 //     success: false,
@@ -53,8 +53,5 @@ app.use((err, req, res, next) => {
 //   });
 // });
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// ✅ Export app for Vercel (do NOT call app.listen)
+module.exports = app;
