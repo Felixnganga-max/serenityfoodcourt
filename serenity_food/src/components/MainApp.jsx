@@ -23,14 +23,30 @@ const api = {
     return response.json();
   },
   createSale: async (saleData) => {
+    console.log("Sending to API:", JSON.stringify(saleData, null, 2));
     const response = await fetch(`${API_BASE_URL}/sales/create-sale`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(saleData),
     });
+
+    console.log("API Response status:", response.status);
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || "Failed to create sale");
+      const errorText = await response.text();
+      console.error("API Error response:", errorText);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText };
+      }
+      // Backend sends 'error' field, not 'message'
+      throw new Error(
+        errorData.error ||
+          errorData.message ||
+          `Failed to create sale (${response.status})`
+      );
     }
     return response.json();
   },
