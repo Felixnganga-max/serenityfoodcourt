@@ -29,14 +29,19 @@ const saleSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     required: true,
-    enum: ["mpesa", "cash", "credit"],
+    enum: ["mpesa", "cash", "credit", "split"], // Added "split"
   },
-  // mpesaCode: {
-  //   type: String,
-  //   required: function () {
-  //     return this.paymentMethod === "mpesa";
-  //   },
-  // },
+  // New field for split payment details
+  splitPayment: {
+    mpesa: {
+      type: Number,
+      default: 0,
+    },
+    cash: {
+      type: Number,
+      default: 0,
+    },
+  },
   isPaid: {
     type: Boolean,
     default: true,
@@ -46,10 +51,10 @@ const saleSchema = new mongoose.Schema({
     default: Date.now,
   },
   date: {
-    type: String, // Store as YYYY-MM-DD for easy querying
+    type: String,
     required: true,
   },
-  vendorName: String, // For catering
+  vendorName: String,
   returnedItems: [
     {
       item: String,
