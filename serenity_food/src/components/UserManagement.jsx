@@ -45,7 +45,7 @@ const UserManagement = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        "http://localhost:5000/serenityfoodcourt/auth/users",
+        "  https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt/auth/users",
         {
           headers: {
             Authorization: `Bearer ${token}`,

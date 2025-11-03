@@ -13,7 +13,8 @@ import {
   Sparkles,
 } from "lucide-react";
 
-const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
+const API_BASE_URL =
+  "https://serenityfoodcourt-un3u.vercel.app/serenityfoodcourt";
 
 const ExpensesManagement = () => {
   const [activeTab, setActiveTab] = useState("expenses");

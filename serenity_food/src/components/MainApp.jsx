@@ -17,6 +17,7 @@ import ExpensesManagement from "./Expenses";
 const API_BASE_URL =
   "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
+
 // API Service
 const api = {
   getSummary: async () => {
