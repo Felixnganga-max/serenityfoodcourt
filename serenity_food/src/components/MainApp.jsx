@@ -21,8 +21,9 @@ const getAuthHeaders = () => {
   };
 };
 
-// API Service
-const api = {
+// API Service functions
+const apiService = {
+  // Sales endpoints
   getSummary: async () => {
     const response = await fetch(`${API_BASE_URL}/sales/summary`, {
       method: "GET",
@@ -69,31 +70,53 @@ const api = {
     return response.json();
   },
 
-  // getCredits: async () => {
-  //   const response = await fetch(`${API_BASE_URL}/credits`, {
-  //     method: "GET",
-  //     headers: getAuthHeaders(),
-  //   });
-  //   if (response.status === 404) {
-  //     // Return empty array if credits endpoint doesn't exist
-  //     return { success: true, data: [] };
-  //   }
-  //   if (!response.ok) throw new Error("Failed to fetch credits");
-  //   return response.json();
-  // },
+  // Credits endpoints - NOTE: These endpoints don't exist in your routes!
+  getCredits: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/credits`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
 
-  // collectCredit: async (creditId, paymentData) => {
-  //   const response = await fetch(
-  //     `${API_BASE_URL}/credits/${creditId}/collect`,
-  //     {
-  //       method: "POST",
-  //       headers: getAuthHeaders(),
-  //       body: JSON.stringify(paymentData),
-  //     }
-  //   );
-  //   if (!response.ok) throw new Error("Failed to collect credit");
-  //   return response.json();
-  // },
+      // Credits endpoint doesn't exist - return empty array
+      if (response.status === 404) {
+        console.warn("Credits endpoint not found, returning empty array");
+        return { success: true, data: [] };
+      }
+
+      if (!response.ok) throw new Error("Failed to fetch credits");
+      return response.json();
+    } catch (error) {
+      console.warn(
+        "Error fetching credits, returning empty array:",
+        error.message
+      );
+      return { success: true, data: [] };
+    }
+  },
+
+  collectCredit: async (creditId, paymentData) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/credits/${creditId}/collect`,
+        {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(paymentData),
+        }
+      );
+
+      if (response.status === 404) {
+        throw new Error("Credits collection endpoint not found");
+      }
+
+      if (!response.ok) throw new Error("Failed to collect credit");
+      return response.json();
+    } catch (error) {
+      console.error("Error collecting credit:", error);
+      throw error;
+    }
+  },
 };
 
 // Placeholder component for features under development
@@ -170,20 +193,19 @@ const MainApp = () => {
       setError(null);
 
       const [summaryResponse, creditsResponse] = await Promise.all([
-        api.getSummary(),
-        api.getCredits(),
+        apiService.getSummary(),
+        apiService.getCredits(), // This will return empty array if endpoint doesn't exist
       ]);
 
       if (summaryResponse.success) {
         setSummaryData(summaryResponse.data);
       }
 
-      if (creditsResponse.success) {
-        setCredits(creditsResponse.data);
-      }
+      // Credits will always be set to empty array if endpoint doesn't exist
+      setCredits(creditsResponse.data || []);
 
       // Fetch today's report for initial load
-      const reportResponse = await api.getReport(
+      const reportResponse = await apiService.getReport(
         new Date().toISOString().split("T")[0]
       );
       if (reportResponse.success) {
@@ -208,7 +230,7 @@ const MainApp = () => {
 
   const fetchReport = async (date) => {
     try {
-      const response = await api.getReport(date);
+      const response = await apiService.getReport(date);
       if (response.success) {
         setReportData(response.data);
       }
@@ -219,7 +241,7 @@ const MainApp = () => {
 
   const handleCreateSale = async (saleData) => {
     try {
-      const response = await api.createSale(saleData);
+      const response = await apiService.createSale(saleData);
       if (response.success) {
         await fetchAllData();
         return response.data;
@@ -232,7 +254,7 @@ const MainApp = () => {
 
   const handleCollectCredit = async (creditId, paymentData) => {
     try {
-      const response = await api.collectCredit(creditId, paymentData);
+      const response = await apiService.collectCredit(creditId, paymentData);
       if (response.success) {
         await fetchAllData();
         return response.data;
