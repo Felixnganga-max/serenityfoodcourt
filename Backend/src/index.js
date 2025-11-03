@@ -21,6 +21,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://serenityfoodcourt-5sgp.vercel.app",
+      "https://serenityfoodcourt-y7o6.vercel.app",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
