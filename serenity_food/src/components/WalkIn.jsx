@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Minus, Plus, Trash2, ShoppingBag, X } from "lucide-react";
 import { PaymentModal } from "./PaymentModal";
+
+const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
 
 export const WalkIn = ({ onCreateSale }) => {
   const [cart, setCart] = useState({});
@@ -8,58 +10,72 @@ export const WalkIn = ({ onCreateSale }) => {
   const [showCart, setShowCart] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [processing, setProcessing] = useState(false);
+  const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const menuCategories = {
-    breakfast: [
-      { name: "Mandazi", price: 10, icon: "🥐" },
-      { name: "Chapati", price: 20, icon: "🫓" },
-      { name: "Samosa", price: 30, icon: "🥟" },
-      { name: "Bhajia", price: 70, icon: "🍟" },
-    ],
-    snacks: [
-      { name: "Chips (Small)", price: 70, icon: "🍟" },
-      { name: "Chips (Large)", price: 100, icon: "🍟" },
-      { name: "Bhajia (Small)", price: 70, icon: "🍟" },
-      { name: "Bhajia (Large)", price: 100, icon: "🍟" },
-      { name: "Sausage", price: 40, icon: "🌭" },
-      { name: "Smokie", price: 30, icon: "🌭" },
-    ],
-    drinks: [
-      { name: "Tea", price: 30, icon: "☕" },
-      { name: "Coffee", price: 25, icon: "☕" },
-      { name: "Soda 500ml", price: 70, icon: "🥤" },
-      { name: "Soda 300ml", price: 45, icon: "🥤" },
-    ],
-  };
+  const token = localStorage.getItem("token") || "";
 
-  const categories = [
-    { id: "all", name: "All", icon: "🍽️" },
-    { id: "breakfast", name: "Breakfast", icon: "🌅" },
-    { id: "snacks", name: "Snacks", icon: "🍟" },
-    { id: "drinks", name: "Drinks", icon: "☕" },
-  ];
+  // Fetch menu items and categories
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const allItems = Object.entries(menuCategories).flatMap(([category, items]) =>
-    items.map((item) => ({ ...item, category }))
-  );
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch categories
+      const categoriesResponse = await fetch(`${API_BASE_URL}/categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const categoriesData = await categoriesResponse.json();
 
-  const filteredItems =
-    activeCategory === "all"
-      ? allItems
-      : allItems.filter((item) => item.category === activeCategory);
+      // Fetch menu items
+      const menuItemsResponse = await fetch(`${API_BASE_URL}/menu-items`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const menuItemsData = await menuItemsResponse.json();
 
-  const updateQuantity = (itemName, newQuantity) => {
-    if (newQuantity <= 0) {
-      const newCart = { ...cart };
-      delete newCart[itemName];
-      setCart(newCart);
-    } else {
-      setCart({ ...cart, [itemName]: newQuantity });
+      if (categoriesData.success && menuItemsData.success) {
+        const activeCategories = categoriesData.data.filter(
+          (cat) => cat.isActive
+        );
+        setCategories([
+          { _id: "all", name: "All Items", icon: "🍽️" },
+          ...activeCategories,
+        ]);
+        setMenuItems(menuItemsData.data.filter((item) => item.isActive));
+      } else {
+        setError("Failed to load data");
+      }
+    } catch (err) {
+      setError("Failed to fetch menu data");
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const cartItems = Object.entries(cart).map(([itemName, quantity]) => {
-    const item = allItems.find((i) => i.name === itemName);
+  const filteredItems =
+    activeCategory === "all"
+      ? menuItems
+      : menuItems.filter(
+          (item) => item.category && item.category._id === activeCategory
+        );
+
+  const updateQuantity = (itemId, newQuantity) => {
+    if (newQuantity <= 0 || newQuantity === "") {
+      const newCart = { ...cart };
+      delete newCart[itemId];
+      setCart(newCart);
+    } else {
+      setCart({ ...cart, [itemId]: newQuantity });
+    }
+  };
+
+  const cartItems = Object.entries(cart).map(([itemId, quantity]) => {
+    const item = menuItems.find((i) => i._id === itemId);
     return { ...item, quantity, total: item.price * quantity };
   });
 
@@ -75,6 +91,7 @@ export const WalkIn = ({ onCreateSale }) => {
       const saleData = {
         type: "walk-in",
         items: cartItems.map((i) => ({
+          menuItem: i._id,
           name: i.name,
           quantity: i.quantity,
           price: i.price,
@@ -90,7 +107,6 @@ export const WalkIn = ({ onCreateSale }) => {
         date: new Date().toISOString().split("T")[0],
       };
 
-      // Add splitPayment only if it's a split payment
       if (isSplit) {
         saleData.splitPayment = {
           mpesa: Number(paymentDetails.mpesaAmount),
@@ -98,14 +114,11 @@ export const WalkIn = ({ onCreateSale }) => {
         };
       }
 
-      console.log("Sending sale data:", saleData); // Debug log
-
       await onCreateSale(saleData);
       setCart({});
       setShowPaymentModal(false);
       setShowCart(false);
 
-      // Simple success notification without toast library
       alert("Sale recorded successfully! 🎉");
     } catch (error) {
       console.error("Sale error:", error);
@@ -114,6 +127,32 @@ export const WalkIn = ({ onCreateSale }) => {
       setProcessing(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading menu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8 text-center">
+        <p className="text-red-600 font-medium">{error}</p>
+        <button
+          onClick={fetchData}
+          className="mt-4 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 pb-32">
       <PaymentModal
@@ -134,7 +173,7 @@ export const WalkIn = ({ onCreateSale }) => {
             className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl max-h-[80vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-red-800 text-white p-6 rounded-t-3xl">
+            <div className="sticky top-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-3xl">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-2xl font-bold">Your Cart</h3>
@@ -142,7 +181,7 @@ export const WalkIn = ({ onCreateSale }) => {
                 </div>
                 <button
                   onClick={() => setShowCart(false)}
-                  className="p-2 hover:bg-white/20 rounded-full"
+                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
                 >
                   <X size={24} />
                 </button>
@@ -161,11 +200,11 @@ export const WalkIn = ({ onCreateSale }) => {
                 <div className="space-y-3">
                   {cartItems.map((item) => (
                     <div
-                      key={item.name}
-                      className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-4 border-2 border-indigo-100"
+                      key={item._id}
+                      className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-4 border-2 border-indigo-100 hover:shadow-md transition-shadow"
                     >
                       <div className="flex items-center gap-4">
-                        <span className="text-3xl">{item.icon}</span>
+                        <span className="text-4xl">{item.icon || "🍽️"}</span>
                         <div className="flex-1">
                           <p className="font-bold text-gray-900">{item.name}</p>
                           <p className="text-sm text-gray-600">
@@ -174,11 +213,11 @@ export const WalkIn = ({ onCreateSale }) => {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-indigo-600 text-lg">
-                            KSh {item.total}
+                            KSh {item.total.toLocaleString()}
                           </p>
                           <button
-                            onClick={() => updateQuantity(item.name, 0)}
-                            className="text-red-500 text-xs font-medium hover:text-red-600 mt-1"
+                            onClick={() => updateQuantity(item._id, 0)}
+                            className="text-red-500 text-xs font-medium hover:text-red-600 mt-1 transition-colors"
                           >
                             Remove
                           </button>
@@ -201,16 +240,17 @@ export const WalkIn = ({ onCreateSale }) => {
                 <div className="flex gap-3">
                   <button
                     onClick={() => setCart({})}
-                    className="px-6 py-4 rounded-xl border-2 border-red-300 text-red-600 font-bold hover:bg-red-50"
+                    className="px-6 py-4 rounded-xl border-2 border-red-300 text-red-600 font-bold hover:bg-red-50 transition-colors"
                   >
-                    Clear
+                    Clear Cart
                   </button>
                   <button
                     onClick={() => {
                       setShowCart(false);
                       setShowPaymentModal(true);
                     }}
-                    className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg"
+                    disabled={processing}
+                    className="flex-1 px-6 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all disabled:opacity-50"
                   >
                     Proceed to Payment
                   </button>
@@ -222,31 +262,35 @@ export const WalkIn = ({ onCreateSale }) => {
       )}
 
       {/* Header */}
-      <div className="bg-red-800 rounded-3xl shadow-xl overflow-hidden">
+      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-3xl shadow-xl overflow-hidden">
         <div className="p-8 relative">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
           <div className="relative z-10">
             <h2 className="text-4xl font-bold text-white mb-2">
               Walk-In Sales
             </h2>
+            <p className="text-indigo-100 text-lg">
+              Quick and easy point of sale
+            </p>
           </div>
         </div>
       </div>
 
       {/* Category Filter */}
-      <div className="bg-white rounded-2xl shadow-sm p-3">
-        <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="bg-white rounded-2xl shadow-lg p-4 border border-gray-100">
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {categories.map((category) => (
             <button
-              key={category.id}
-              onClick={() => setActiveCategory(category.id)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${
-                activeCategory === category.id
+              key={category._id}
+              onClick={() => setActiveCategory(category._id)}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all duration-200 ${
+                activeCategory === category._id
                   ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-102"
               }`}
             >
-              <span className="text-xl">{category.icon}</span>
+              <span className="text-2xl">{category.icon || "📦"}</span>
               <span>{category.name}</span>
             </button>
           ))}
@@ -254,72 +298,116 @@ export const WalkIn = ({ onCreateSale }) => {
       </div>
 
       {/* Menu Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {filteredItems.map((item) => {
-          const quantity = cart[item.name] || 0;
+          const quantity = cart[item._id] || 0;
           return (
             <div
-              key={item.name}
-              className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all p-5 ${
-                quantity > 0 ? "ring-2 ring-indigo-500 shadow-lg" : ""
+              key={item._id}
+              className={`bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 p-6 flex flex-col items-center ${
+                quantity > 0
+                  ? "ring-4 ring-indigo-400 shadow-2xl scale-105"
+                  : "hover:scale-105"
               }`}
             >
-              <div className="flex items-start gap-4 mb-4">
-                <div className="text-5xl">{item.icon}</div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-lg text-gray-900 mb-1">
-                    {item.name}
-                  </h4>
-                  <p className="text-2xl font-bold text-indigo-600">
-                    KSh {item.price}
-                  </p>
-                </div>
-              </div>
+              {/* Icon at the top - larger */}
+              <div className="text-7xl mb-4">{item.icon || "🍽️"}</div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => updateQuantity(item.name, quantity - 1)}
-                  disabled={quantity === 0}
-                  className="w-11 h-11 rounded-xl bg-gray-200 hover:bg-gray-300 disabled:opacity-30 flex items-center justify-center transition-colors"
-                >
-                  <Minus size={20} />
-                </button>
+              {/* Item name */}
+              <h4 className="font-bold text-lg text-gray-900 text-center mb-2 min-h-[3.5rem] flex items-center">
+                {item.name}
+              </h4>
+
+              {/* Price */}
+              <p className="text-2xl font-bold text-indigo-600 mb-4">
+                KSh {item.price}
+              </p>
+
+              {/* Quantity Input */}
+              <div className="w-full">
                 <input
                   type="number"
                   min="0"
-                  value={quantity}
-                  onChange={(e) =>
-                    updateQuantity(item.name, parseInt(e.target.value) || 0)
-                  }
-                  className="flex-1 h-11 text-center border-2 border-gray-300 rounded-xl font-bold text-lg focus:border-indigo-500 focus:outline-none"
+                  value={quantity === 0 ? "" : quantity}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      updateQuantity(item._id, 0);
+                    } else {
+                      updateQuantity(item._id, parseInt(value) || 0);
+                    }
+                  }}
+                  onFocus={(e) => {
+                    if (e.target.value === "0") {
+                      e.target.value = "";
+                    }
+                  }}
+                  placeholder="0"
+                  className="w-full h-14 text-center border-3 border-gray-300 rounded-xl font-bold text-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-200 focus:outline-none transition-all"
                 />
-                <button
-                  onClick={() => updateQuantity(item.name, quantity + 1)}
-                  className="w-11 h-11 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md hover:shadow-lg transition-all"
-                >
-                  <Plus size={20} />
-                </button>
+
+                {/* Quick add buttons */}
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <button
+                    onClick={() => updateQuantity(item._id, quantity + 1)}
+                    className="py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105"
+                  >
+                    +1
+                  </button>
+                  <button
+                    onClick={() => updateQuantity(item._id, quantity + 5)}
+                    className="py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105"
+                  >
+                    +5
+                  </button>
+                  <button
+                    onClick={() => updateQuantity(item._id, 0)}
+                    disabled={quantity === 0}
+                    className="py-2 rounded-lg bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
+
+              {/* Active indicator */}
+              {quantity > 0 && (
+                <div className="mt-3 bg-indigo-100 text-indigo-700 px-4 py-2 rounded-full text-sm font-bold">
+                  {quantity} in cart
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
+      {filteredItems.length === 0 && (
+        <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-gray-300">
+          <div className="text-6xl mb-4">🍽️</div>
+          <p className="text-lg font-medium text-gray-600">
+            No items in this category
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            Try selecting a different category
+          </p>
+        </div>
+      )}
+
       {/* Floating Cart Button */}
       {cartItems.length > 0 && (
         <button
           onClick={() => setShowCart(true)}
-          className="fixed bottom-6 right-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-2xl p-5 flex items-center gap-3 hover:scale-110 transition-transform z-30"
+          className="fixed bottom-6 right-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-2xl p-6 flex items-center gap-3 hover:scale-110 transition-all duration-300 z-30 animate-bounce"
         >
           <div className="relative">
-            <ShoppingBag size={28} />
-            <span className="absolute -top-2 -right-2 bg-pink-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+            <ShoppingBag size={32} />
+            <span className="absolute -top-3 -right-3 bg-pink-500 text-white text-sm font-bold rounded-full w-7 h-7 flex items-center justify-center shadow-lg">
               {itemCount}
             </span>
           </div>
           <div className="hidden sm:block text-left">
             <p className="text-sm font-medium opacity-90">View Cart</p>
-            <p className="text-lg font-bold">KSh {total.toLocaleString()}</p>
+            <p className="text-xl font-bold">KSh {total.toLocaleString()}</p>
           </div>
         </button>
       )}

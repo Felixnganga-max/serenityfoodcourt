@@ -1,18 +1,18 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Menu,
   Home,
   ShoppingCart,
   Truck,
   Package,
-  CreditCard,
-  Banknote,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  TrendingUp,
-  DollarSign,
   FileText,
+  LogOut,
+  Shield,
+  User,
+  DollarSign,
+  Users,
+  Settings,
 } from "lucide-react";
 
 export const Sidebar = ({
@@ -21,6 +21,104 @@ export const Sidebar = ({
   sidebarOpen,
   setSidebarOpen,
 }) => {
+  const [user, setUser] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/account");
+  };
+
+  // Define navigation items based on role
+  const getNavItems = () => {
+    if (!user) return [];
+
+    const commonItems = [
+      {
+        icon: Home,
+        label: "Dashboard",
+        tabName: "dashboard",
+        roles: ["manager", "shop-attendant", "vendor"],
+      },
+    ];
+
+    const attendantItems = [
+      {
+        icon: ShoppingCart,
+        label: "Walk-In Sales",
+        tabName: "walkin",
+        roles: ["manager", "shop-attendant"],
+      },
+      {
+        icon: Truck,
+        label: "Outside Catering",
+        tabName: "catering",
+        roles: ["manager", "shop-attendant"],
+      },
+    ];
+
+    const managerOnlyItems = [
+      {
+        icon: FileText,
+        label: "Sales Reports",
+        tabName: "reports",
+        roles: ["manager"],
+      },
+      {
+        icon: Package,
+        label: "Inventory",
+        tabName: "inventory",
+        roles: ["manager"],
+      },
+      {
+        icon: DollarSign,
+        label: "Smart Manager",
+        tabName: "expenses",
+        roles: ["manager"],
+      },
+      {
+        icon: Users,
+        label: "User Management",
+        tabName: "users",
+        roles: ["manager"],
+      },
+    ];
+
+    const vendorItems = [
+      {
+        icon: Package,
+        label: "My Products",
+        tabName: "vendor-products",
+        roles: ["vendor"],
+      },
+      {
+        icon: ShoppingCart,
+        label: "My Sales",
+        tabName: "vendor-sales",
+        roles: ["vendor"],
+      },
+    ];
+
+    const allItems = [
+      ...commonItems,
+      ...attendantItems,
+      ...managerOnlyItems,
+      ...vendorItems,
+    ];
+
+    // Filter based on user role
+    return allItems.filter((item) => item.roles.includes(user.role));
+  };
+
+  const navItems = getNavItems();
+
   const NavButton = ({ icon: Icon, label, tabName }) => (
     <button
       onClick={() => {
@@ -45,24 +143,68 @@ export const Sidebar = ({
       }`}
     >
       <div className="h-full flex flex-col">
+        {/* Header */}
         <div className="p-8 bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-600">
           <h1 className="text-3xl font-bold text-white mb-2">
             ☕ SERENITY FOOD COURT
           </h1>
         </div>
-        <nav className="flex-1 p-6 space-y-3">
-          <NavButton icon={Home} label="Dashboard" tabName="dashboard" />
-          <NavButton
-            icon={ShoppingCart}
-            label="Walk-In Sales"
-            tabName="walkin"
-          />
-          <NavButton icon={Truck} label="Outside Catering" tabName="catering" />
-          <NavButton icon={FileText} label="Sales Reports" tabName="reports" />
-          <NavButton icon={Package} label="Inventory" tabName="inventory" />
+
+        {/* User Info */}
+        {user && (
+          <div className="p-6 bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-full flex items-center justify-center">
+                <User className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-800 truncate">
+                  {user.fullName}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                  <span className="text-xs font-semibold text-indigo-600 uppercase">
+                    {user.role}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <nav className="flex-1 p-6 space-y-3 overflow-y-auto">
+          {navItems.map((item) => (
+            <NavButton
+              key={item.tabName}
+              icon={item.icon}
+              label={item.label}
+              tabName={item.tabName}
+            />
+          ))}
         </nav>
-        <div className="p-6 border-t border-gray-200">
-          <p className="text-sm text-gray-500">© 2025 Serenity Food Court</p>
+
+        {/* Footer with Settings & Logout */}
+        <div className="p-6 border-t border-gray-200 space-y-2">
+          <button
+            onClick={() => setActiveTab("settings")}
+            className="w-full flex items-center gap-4 px-6 py-3 rounded-xl text-gray-700 hover:bg-slate-50 transition-all duration-200"
+          >
+            <Settings size={20} />
+            <span className="font-medium">Settings</span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-4 px-6 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-all duration-200"
+          >
+            <LogOut size={20} />
+            <span className="font-medium">Logout</span>
+          </button>
+
+          <p className="text-sm text-gray-500 text-center mt-4">
+            © 2025 Serenity Food Court
+          </p>
         </div>
       </div>
     </div>

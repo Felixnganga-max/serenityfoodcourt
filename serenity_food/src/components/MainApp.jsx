@@ -5,6 +5,13 @@ import { Dashboard } from "./Dashboard";
 import { WalkIn } from "./WalkIn";
 import { SalesReports } from "./SalesReports";
 import { OutsideCatering } from "./OutsideCatering";
+import UserManagement from "./UserManagement";
+// Import these components when you create them
+// import Inventory from "./Inventory";
+import ExpensesManagement from "./Expenses";
+// import Settings from "./Settings";
+// import VendorProducts from "./VendorProducts";
+// import VendorSales from "./VendorSales";
 
 // API Configuration
 const API_BASE_URL =
@@ -41,7 +48,6 @@ const api = {
       } catch {
         errorData = { error: errorText };
       }
-      // Backend sends 'error' field, not 'message'
       throw new Error(
         errorData.error ||
           errorData.message ||
@@ -68,6 +74,22 @@ const api = {
     return response.json();
   },
 };
+
+// Placeholder component for features under development
+const ComingSoon = ({ title, description }) => (
+  <div className="min-h-[60vh] flex items-center justify-center">
+    <div className="text-center max-w-md">
+      <div className="w-24 h-24 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+        <AlertCircle size={48} className="text-indigo-600" />
+      </div>
+      <h2 className="text-3xl font-bold text-gray-800 mb-3">{title}</h2>
+      <p className="text-gray-600 mb-6">{description}</p>
+      <div className="inline-block px-6 py-3 bg-indigo-100 text-indigo-700 rounded-lg font-semibold">
+        Coming Soon
+      </div>
+    </div>
+  </div>
+);
 
 const MainApp = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -161,6 +183,81 @@ const MainApp = () => {
     }
   };
 
+  // Function to render the active tab content
+  const renderContent = () => {
+    switch (activeTab) {
+      case "dashboard":
+        return <Dashboard summaryData={summaryData} credits={credits} />;
+
+      case "walkin":
+        return <WalkIn onCreateSale={handleCreateSale} />;
+
+      case "catering":
+        return (
+          <OutsideCatering
+            credits={credits}
+            onCreateSale={handleCreateSale}
+            onCollectCredit={handleCollectCredit}
+          />
+        );
+
+      case "reports":
+        return (
+          <SalesReports
+            reportData={reportData}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            onDateChange={fetchReport}
+          />
+        );
+
+      case "users":
+        return <UserManagement />;
+
+      case "inventory":
+        return (
+          <ComingSoon
+            title="Inventory Management"
+            description="Track stock levels, manage raw materials, and monitor product availability."
+          />
+        );
+      // Uncomment when ready: return <Inventory />;
+
+      case "expenses":
+        return <ExpensesManagement />;
+
+      case "settings":
+        return (
+          <ComingSoon
+            title="Settings"
+            description="Configure system preferences, manage menu items, and customize your experience."
+          />
+        );
+      // Uncomment when ready: return <Settings />;
+
+      case "vendor-products":
+        return (
+          <ComingSoon
+            title="My Products"
+            description="Manage your product catalog and track product performance."
+          />
+        );
+      // Uncomment when ready: return <VendorProducts />;
+
+      case "vendor-sales":
+        return (
+          <ComingSoon
+            title="My Sales"
+            description="View your sales history and performance metrics."
+          />
+        );
+      // Uncomment when ready: return <VendorSales />;
+
+      default:
+        return <Dashboard summaryData={summaryData} credits={credits} />;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
@@ -225,25 +322,7 @@ const MainApp = () => {
         </header>
 
         <main className="p-6 md:p-10 lg:p-12 max-w-[1800px] mx-auto w-full">
-          {activeTab === "dashboard" && (
-            <Dashboard summaryData={summaryData} credits={credits} />
-          )}
-          {activeTab === "walkin" && <WalkIn onCreateSale={handleCreateSale} />}
-          {activeTab === "catering" && (
-            <OutsideCatering
-              credits={credits}
-              onCreateSale={handleCreateSale}
-              onCollectCredit={handleCollectCredit}
-            />
-          )}
-          {activeTab === "reports" && (
-            <SalesReports
-              reportData={reportData}
-              selectedDate={selectedDate}
-              setSelectedDate={setSelectedDate}
-              onDateChange={fetchReport}
-            />
-          )}
+          {renderContent()}
         </main>
       </div>
     </div>
