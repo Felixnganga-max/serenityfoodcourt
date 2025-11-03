@@ -6,10 +6,8 @@ require("dotenv").config();
 
 const connectDB = require("./config/db");
 
-// Route imports
-const salesRoutes = require("./routes/sales");
-const creditsRoutes = require("./routes/credits");
-const inventoryRoutes = require("./routes/inventory");
+// Route imports - single consolidated route file
+const cafeRoutes = require("./routes/cafeRoutes");
 
 const app = express();
 
@@ -32,10 +30,8 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json());
 
-// Routes
-app.use("/serenityfoodcourt/sales", salesRoutes);
-app.use("/serenityfoodcourt/credits", creditsRoutes);
-app.use("/serenityfoodcourt/inventory", inventoryRoutes);
+// Routes - mount all cafe routes under /serenityfoodcourt
+app.use("/serenityfoodcourt", cafeRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
@@ -55,7 +51,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler (optional)
+// 404 handler
 // app.use("*", (req, res) => {
 //   res.status(404).json({
 //     success: false,
@@ -63,5 +59,14 @@ app.use((err, req, res, next) => {
 //   });
 // });
 
-// ✅ Export app for Vercel (do NOT call app.listen)
+// ✅ Start server only if not in Vercel environment
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`);
+  });
+}
+
+// ✅ Export app for Vercel
 module.exports = app;

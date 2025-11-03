@@ -1,19 +1,38 @@
-const Sale = require("../models/sales");
+const { Sale, MenuItem, User } = require("../models/sales");
 
 // Create new sale
 exports.createSale = async (req, res) => {
   try {
     const saleData = {
       ...req.body,
+      recordedBy: req.user.id,
       date: new Date().toISOString().split("T")[0],
     };
+
+    // Validate sale type based on user role
+    if (req.user.role === "shop-attendant" && saleData.type !== "walk-in") {
+      return res.status(403).json({
+        success: false,
+        error: "Shop attendants can only create walk-in sales",
+      });
+    }
+
+    if (
+      req.user.role === "vendor" &&
+      saleData.type !== "outside-catering" &&
+      saleData.type !== "credit-collection"
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: "Vendors can only create catering sales",
+      });
+    }
 
     // Validate split payment if method is "split"
     if (saleData.paymentMethod === "split") {
       const { mpesa = 0, cash = 0 } = saleData.splitPayment || {};
       const splitTotal = mpesa + cash;
 
-      // Allow small rounding differences (0.01)
       if (Math.abs(splitTotal - saleData.totalAmount) > 0.01) {
         return res.status(400).json({
           success: false,
@@ -24,6 +43,7 @@ exports.createSale = async (req, res) => {
 
     const sale = new Sale(saleData);
     await sale.save();
+    await sale.populate("recordedBy", "fullName username");
 
     res.status(201).json({
       success: true,
@@ -37,25 +57,48 @@ exports.createSale = async (req, res) => {
   }
 };
 
-// Get all sales with optional date filter
+// Get all sales with role-based filtering
 exports.getSales = async (req, res) => {
   try {
     const { date, type, startDate, endDate } = req.query;
+    const today = new Date().toISOString().split("T")[0];
+
     let filter = {};
 
-    if (date) {
-      filter.date = date;
+    // Role-based filtering
+    if (req.user.role !== "manager") {
+      // Non-managers can only see their own sales for today
+      filter.recordedBy = req.user.id;
+      filter.date = today;
+
+      // Check if they have temporary access to see other sales
+      if (!req.canViewOthers) {
+        filter.date = today;
+      }
+    } else {
+      // Manager can see all sales with date filters
+      if (date) {
+        filter.date = date;
+      }
+
+      if (startDate && endDate) {
+        filter.date = { $gte: startDate, $lte: endDate };
+      }
     }
 
-    if (type) {
+    // Type filtering (for managers)
+    if (type && req.user.role === "manager") {
       filter.type = type;
+    } else if (req.user.role === "shop-attendant") {
+      filter.type = "walk-in";
+    } else if (req.user.role === "vendor") {
+      filter.type = { $in: ["outside-catering", "credit-collection"] };
     }
 
-    if (startDate && endDate) {
-      filter.date = { $gte: startDate, $lte: endDate };
-    }
-
-    const sales = await Sale.find(filter).sort({ timestamp: -1 });
+    const sales = await Sale.find(filter)
+      .populate("recordedBy", "fullName username")
+      .populate("items.menuItem")
+      .sort({ timestamp: -1 });
 
     res.json({
       success: true,
@@ -73,10 +116,22 @@ exports.getSales = async (req, res) => {
 // Get sales summary for dashboard
 exports.getSalesSummary = async (req, res) => {
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const { date } = req.query;
+    const today = date || new Date().toISOString().split("T")[0];
+
+    let matchFilter = { date: today, isPaid: true };
+
+    // Role-based filtering
+    if (req.user.role === "shop-attendant") {
+      matchFilter.recordedBy = req.user.id;
+      matchFilter.type = "walk-in";
+    } else if (req.user.role === "vendor") {
+      matchFilter.recordedBy = req.user.id;
+      matchFilter.type = { $in: ["outside-catering", "credit-collection"] };
+    }
 
     const todaySales = await Sale.aggregate([
-      { $match: { date: today, isPaid: true } },
+      { $match: matchFilter },
       {
         $group: {
           _id: "$type",
@@ -86,9 +141,9 @@ exports.getSalesSummary = async (req, res) => {
       },
     ]);
 
-    // Enhanced payment methods aggregation to handle split payments
+    // Enhanced payment methods aggregation
     const paymentMethods = await Sale.aggregate([
-      { $match: { date: today, isPaid: true } },
+      { $match: matchFilter },
       {
         $facet: {
           regularPayments: [
@@ -232,12 +287,26 @@ exports.getSalesSummary = async (req, res) => {
       },
     ]);
 
+    // Get user's personal stats
+    const userStats = await Sale.aggregate([
+      { $match: { date: today, isPaid: true, recordedBy: req.user.id } },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: "$totalAmount" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
     res.json({
       success: true,
       data: {
         todaySales,
         paymentMethods,
+        userStats: userStats[0] || { totalAmount: 0, count: 0 },
         date: today,
+        role: req.user.role,
       },
     });
   } catch (error) {
@@ -248,18 +317,37 @@ exports.getSalesSummary = async (req, res) => {
   }
 };
 
-// Get sales reports with item analysis
+// Get sales reports with item analysis (Manager only or with enhanced access)
 exports.getSalesReport = async (req, res) => {
   try {
-    const { date } = req.query;
-    const reportDate = date || new Date().toISOString().split("T")[0];
+    const { date, startDate, endDate, rawMaterialGroup } = req.query;
+    let reportDate;
+    let dateFilter = {};
 
-    const sales = await Sale.find({ date: reportDate });
+    if (startDate && endDate) {
+      dateFilter = { date: { $gte: startDate, $lte: endDate } };
+      reportDate = `${startDate} to ${endDate}`;
+    } else {
+      reportDate = date || new Date().toISOString().split("T")[0];
+      dateFilter = { date: reportDate };
+    }
 
-    // Item analysis
+    // Role-based filtering
+    if (req.user.role !== "manager" && !req.canViewOthers) {
+      dateFilter.recordedBy = req.user.id;
+    }
+
+    const sales = await Sale.find(dateFilter)
+      .populate("items.menuItem")
+      .populate("recordedBy", "fullName username");
+
+    // Item analysis with raw material grouping
     const itemAnalysis = {};
+    const rawMaterialAnalysis = {};
+
     sales.forEach((sale) => {
       sale.items.forEach((item) => {
+        // Individual item analysis
         if (!itemAnalysis[item.name]) {
           itemAnalysis[item.name] = {
             name: item.name,
@@ -267,6 +355,7 @@ exports.getSalesReport = async (req, res) => {
             walkInQty: 0,
             cateringQty: 0,
             totalRevenue: 0,
+            rawMaterialGroup: item.menuItem?.rawMaterialGroup,
           };
         }
 
@@ -278,6 +367,30 @@ exports.getSalesReport = async (req, res) => {
         } else {
           itemAnalysis[item.name].cateringQty += item.quantity;
         }
+
+        // Raw material group analysis
+        if (item.menuItem?.rawMaterialGroup) {
+          const groupId = item.menuItem.rawMaterialGroup._id.toString();
+          const groupName = item.menuItem.rawMaterialGroup.name;
+
+          if (!rawMaterialAnalysis[groupId]) {
+            rawMaterialAnalysis[groupId] = {
+              name: groupName,
+              totalQuantity: 0,
+              totalRevenue: 0,
+              items: [],
+            };
+          }
+
+          rawMaterialAnalysis[groupId].totalQuantity += item.quantity;
+          rawMaterialAnalysis[groupId].totalRevenue += item.total;
+
+          if (
+            !rawMaterialAnalysis[groupId].items.find((i) => i === item.name)
+          ) {
+            rawMaterialAnalysis[groupId].items.push(item.name);
+          }
+        }
       });
     });
 
@@ -285,12 +398,18 @@ exports.getSalesReport = async (req, res) => {
       (a, b) => b.totalQuantity - a.totalQuantity
     );
 
-    // Potato-based items analysis
-    const potatoItems = itemsArray.filter(
-      (item) =>
-        item.name.toLowerCase().includes("chips") ||
-        item.name.toLowerCase().includes("bhajia")
+    const rawMaterialArray = Object.values(rawMaterialAnalysis).sort(
+      (a, b) => b.totalRevenue - a.totalRevenue
     );
+
+    // Filter by raw material group if specified
+    let filteredItems = itemsArray;
+    if (rawMaterialGroup) {
+      filteredItems = itemsArray.filter(
+        (item) =>
+          item.rawMaterialGroup?._id.toString() === rawMaterialGroup.toString()
+      );
+    }
 
     // Payment breakdown including split payments
     const paymentBreakdown = {
@@ -317,8 +436,8 @@ exports.getSalesReport = async (req, res) => {
       data: {
         date: reportDate,
         totalSales: sales.length,
-        itemsAnalysis: itemsArray,
-        potatoAnalysis: potatoItems,
+        itemsAnalysis: filteredItems,
+        rawMaterialAnalysis: rawMaterialArray,
         paymentBreakdown,
         walkInSales: sales.filter((s) => s.type === "walk-in"),
         cateringSales: sales.filter((s) => s.type === "outside-catering"),
@@ -333,6 +452,87 @@ exports.getSalesReport = async (req, res) => {
             .filter((s) => s.type === "outside-catering" && !s.isPaid)
             .reduce((sum, s) => sum + s.totalAmount, 0),
         },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
+// Get profit analysis (Manager only)
+exports.getProfitAnalysis = async (req, res) => {
+  try {
+    const { startDate, endDate, period = "daily" } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: "startDate and endDate are required",
+      });
+    }
+
+    // Get sales data
+    const sales = await Sale.find({
+      date: { $gte: startDate, $lte: endDate },
+      isPaid: true,
+    });
+
+    const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+
+    // Get expenses for the period
+    const { Expense } = require("../models");
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const diffTime = Math.abs(end - start);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    const expenses = await Expense.find({
+      startDate: { $lte: endDate },
+      $or: [{ endDate: { $gte: startDate } }, { endDate: null }],
+    });
+
+    let totalExpenses = 0;
+
+    expenses.forEach((expense) => {
+      let allocatedAmount = 0;
+
+      switch (expense.allocationPeriod) {
+        case "daily":
+          allocatedAmount = expense.amount * diffDays;
+          break;
+        case "weekly":
+          allocatedAmount = expense.amount * Math.ceil(diffDays / 7);
+          break;
+        case "bi-weekly":
+          allocatedAmount = expense.amount * Math.ceil(diffDays / 14);
+          break;
+        case "monthly":
+          allocatedAmount = expense.amount * Math.ceil(diffDays / 30);
+          break;
+      }
+
+      totalExpenses += allocatedAmount;
+    });
+
+    const profit = totalRevenue - totalExpenses;
+    const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
+    res.json({
+      success: true,
+      data: {
+        period: {
+          startDate,
+          endDate,
+          days: diffDays,
+        },
+        revenue: totalRevenue,
+        expenses: totalExpenses,
+        profit,
+        profitMargin: profitMargin.toFixed(2),
       },
     });
   } catch (error) {
