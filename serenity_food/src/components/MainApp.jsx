@@ -6,35 +6,46 @@ import { WalkIn } from "./WalkIn";
 import { SalesReports } from "./SalesReports";
 import { OutsideCatering } from "./OutsideCatering";
 import UserManagement from "./UserManagement";
-// Import these components when you create them
-// import Inventory from "./Inventory";
 import ExpensesManagement from "./Expenses";
-// import Settings from "./Settings";
-// import VendorProducts from "./VendorProducts";
-// import VendorSales from "./VendorSales";
 
 // API Configuration
 const API_BASE_URL =
   "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+};
 
 // API Service
 const api = {
   getSummary: async () => {
-    const response = await fetch(`${API_BASE_URL}/sales/summary`);
+    const response = await fetch(`${API_BASE_URL}/sales/summary`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error("Failed to fetch summary");
     return response.json();
   },
+
   getReport: async (date) => {
-    const response = await fetch(`${API_BASE_URL}/sales/report?date=${date}`);
+    const response = await fetch(`${API_BASE_URL}/sales/report?date=${date}`, {
+      method: "GET",
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error("Failed to fetch report");
     return response.json();
   },
+
   createSale: async (saleData) => {
     console.log("Sending to API:", JSON.stringify(saleData, null, 2));
     const response = await fetch(`${API_BASE_URL}/sales/create-sale`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify(saleData),
     });
 
@@ -57,23 +68,32 @@ const api = {
     }
     return response.json();
   },
-  getCredits: async () => {
-    const response = await fetch(`${API_BASE_URL}/credits`);
-    if (!response.ok) throw new Error("Failed to fetch credits");
-    return response.json();
-  },
-  collectCredit: async (creditId, paymentData) => {
-    const response = await fetch(
-      `${API_BASE_URL}/credits/${creditId}/collect`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentData),
-      }
-    );
-    if (!response.ok) throw new Error("Failed to collect credit");
-    return response.json();
-  },
+
+  // getCredits: async () => {
+  //   const response = await fetch(`${API_BASE_URL}/credits`, {
+  //     method: "GET",
+  //     headers: getAuthHeaders(),
+  //   });
+  //   if (response.status === 404) {
+  //     // Return empty array if credits endpoint doesn't exist
+  //     return { success: true, data: [] };
+  //   }
+  //   if (!response.ok) throw new Error("Failed to fetch credits");
+  //   return response.json();
+  // },
+
+  // collectCredit: async (creditId, paymentData) => {
+  //   const response = await fetch(
+  //     `${API_BASE_URL}/credits/${creditId}/collect`,
+  //     {
+  //       method: "POST",
+  //       headers: getAuthHeaders(),
+  //       body: JSON.stringify(paymentData),
+  //     }
+  //   );
+  //   if (!response.ok) throw new Error("Failed to collect credit");
+  //   return response.json();
+  // },
 };
 
 // Placeholder component for features under development
@@ -104,8 +124,38 @@ const MainApp = () => {
     new Date().toISOString().split("T")[0]
   );
 
+  // Authentication check
   useEffect(() => {
-    fetchAllData();
+    const checkAuth = () => {
+      const token = localStorage.getItem("token");
+      const user = localStorage.getItem("user");
+
+      if (!token || !user) {
+        window.location.href = "/login";
+        return false;
+      }
+
+      try {
+        // Basic token validation
+        const tokenParts = token.split(".");
+        if (tokenParts.length !== 3) {
+          throw new Error("Invalid token format");
+        }
+
+        console.log("User authenticated:", JSON.parse(user));
+        return true;
+      } catch (err) {
+        console.error("Auth error:", err);
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+        return false;
+      }
+    };
+
+    if (checkAuth()) {
+      fetchAllData();
+    }
   }, []);
 
   useEffect(() => {
@@ -141,6 +191,15 @@ const MainApp = () => {
       }
     } catch (err) {
       console.error("Error fetching data:", err);
+
+      // Handle authentication errors
+      if (err.message.includes("401") || err.message.includes("403")) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+        return;
+      }
+
       setError("Failed to connect to server");
     } finally {
       setLoading(false);
@@ -222,7 +281,6 @@ const MainApp = () => {
             description="Track stock levels, manage raw materials, and monitor product availability."
           />
         );
-      // Uncomment when ready: return <Inventory />;
 
       case "expenses":
         return <ExpensesManagement />;
@@ -234,7 +292,6 @@ const MainApp = () => {
             description="Configure system preferences, manage menu items, and customize your experience."
           />
         );
-      // Uncomment when ready: return <Settings />;
 
       case "vendor-products":
         return (
@@ -243,7 +300,6 @@ const MainApp = () => {
             description="Manage your product catalog and track product performance."
           />
         );
-      // Uncomment when ready: return <VendorProducts />;
 
       case "vendor-sales":
         return (
@@ -252,7 +308,6 @@ const MainApp = () => {
             description="View your sales history and performance metrics."
           />
         );
-      // Uncomment when ready: return <VendorSales />;
 
       default:
         return <Dashboard summaryData={summaryData} credits={credits} />;
