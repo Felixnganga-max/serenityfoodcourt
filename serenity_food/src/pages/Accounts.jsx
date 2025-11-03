@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User, Lock, UserPlus, LogIn, Eye, EyeOff, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-const API_URL = "http://localhost:5000/serenityfoodcourt";
+const API_URL = "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 export default function Accounts() {
   const [showPassword, setShowPassword] = useState(false);
