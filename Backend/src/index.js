@@ -8,6 +8,7 @@ const connectDB = require("./config/db");
 
 // Route imports - single consolidated route file
 const cafeRoutes = require("./routes/cafeRoutes");
+const cateringRoutes = require("./routes/catering");
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use(express.json());
 
 // Routes - mount all cafe routes under /serenityfoodcourt
 app.use("/serenityfoodcourt", cafeRoutes);
+app.use("/serenityfoodcourt/outside-catering", cateringRoutes);
 
 // Health check
 app.get("/health", (req, res) => {

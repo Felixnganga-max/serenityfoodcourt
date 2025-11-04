@@ -229,4 +229,16 @@ router.get(
   salesController.getProfitAnalysis
 );
 
+// router.get(
+//   "/credits",
+//   authController.authenticate,
+//   creditsController.getCredits
+// );
+
+// router.post(
+//   "/credits/:creditId/collect",
+//   authController.authenticate,
+//   creditsController.collectCredit
+// );
+
 module.exports = router;
