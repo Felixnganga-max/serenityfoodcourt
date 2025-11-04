@@ -1,13 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus,
   Minus,
   Calculator,
   UserPlus,
-  RotateCcw,
   PlayCircle,
   CheckCircle,
+  ShoppingBag,
+  X,
 } from "lucide-react";
+
+const API_BASE_URL =
+  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
   const [rounds, setRounds] = useState([]);
@@ -23,92 +27,97 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
   const [creditCustomer, setCreditCustomer] = useState({ name: "", amount: 0 });
   const [activeCategory, setActiveCategory] = useState("all");
 
-  const menuItems = {
-    drinks: [
-      {
-        name: "Tea (Flask)",
-        price: 270,
-        unit: "flask",
-        cupsPerFlask: 9,
-        icon: "🫖",
-      },
-      { name: "Tea (Cups)", price: 30, unit: "cups", icon: "☕" },
-      { name: "Coffee", price: 25, unit: "cups", icon: "☕" },
-    ],
-    food: [
-      { name: "Mandazi", price: 10, unit: "pcs", icon: "🥐" },
-      { name: "Chapati", price: 20, unit: "pcs", icon: "🫓" },
-      { name: "Samosa", price: 30, unit: "pcs", icon: "🥟" },
-      { name: "Sausage", price: 40, unit: "pcs", icon: "🌭" },
-      { name: "Smokie", price: 30, unit: "pcs", icon: "🌭" },
-    ],
-    snacks: [
-      { name: "Chips (Small)", price: 70, unit: "pcs", icon: "🍟" },
-      { name: "Chips (Large)", price: 100, unit: "pcs", icon: "🍟" },
-      { name: "Bhajia (Small)", price: 70, unit: "pcs", icon: "🍟" },
-      { name: "Bhajia (Large)", price: 100, unit: "pcs", icon: "🍟" },
-    ],
+  // API state
+  const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const token = localStorage.getItem("token") || "";
+
+  // Fetch menu items and categories
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const categoriesResponse = await fetch(`${API_BASE_URL}/categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const categoriesData = await categoriesResponse.json();
+
+      const menuItemsResponse = await fetch(`${API_BASE_URL}/menu-items`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const menuItemsData = await menuItemsResponse.json();
+
+      if (categoriesData.success && menuItemsData.success) {
+        const activeCategories = categoriesData.data.filter(
+          (cat) => cat.isActive
+        );
+        setCategories([
+          { _id: "all", name: "All Items", icon: "🍽️" },
+          ...activeCategories,
+        ]);
+        setMenuItems(menuItemsData.data.filter((item) => item.isActive));
+      } else {
+        setError("Failed to load data");
+      }
+    } catch (err) {
+      setError("Failed to fetch menu data");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const categories = [
-    { id: "all", name: "All" },
-    { id: "drinks", name: "Drinks" },
-    { id: "food", name: "Food" },
-    { id: "snacks", name: "Snacks" },
-  ];
-
-  const allItems = Object.entries(menuItems).flatMap(([cat, items]) =>
-    items.map((item) => ({ ...item, category: cat }))
-  );
 
   const filteredItems =
     activeCategory === "all"
-      ? allItems
-      : allItems.filter((item) => item.category === activeCategory);
+      ? menuItems
+      : menuItems.filter(
+          (item) => item.category && item.category._id === activeCategory
+        );
 
-  const updateQuantity = (itemName, qty) => {
+  const updateQuantity = (itemId, qty) => {
     if (qty <= 0) {
       const newItems = { ...currentRound.items };
-      delete newItems[itemName];
+      delete newItems[itemId];
       setCurrentRound({ ...currentRound, items: newItems });
     } else {
       setCurrentRound({
         ...currentRound,
-        items: { ...currentRound.items, [itemName]: qty },
+        items: { ...currentRound.items, [itemId]: qty },
       });
     }
   };
 
-  const updateReturnQuantity = (itemName, qty) => {
-    const item = allItems.find((i) => i.name === itemName);
-    const takenQty = currentRound.items[itemName] || 0;
-
-    // For flasks, convert to cups for max validation
-    const maxQty =
-      item.name === "Tea (Flask)" ? takenQty * item.cupsPerFlask : takenQty;
+  const updateReturnQuantity = (itemId, qty) => {
+    const takenQty = currentRound.items[itemId] || 0;
 
     if (qty <= 0) {
       const newReturns = { ...currentRound.returns };
-      delete newReturns[itemName];
+      delete newReturns[itemId];
       setCurrentRound({ ...currentRound, returns: newReturns });
-    } else if (qty <= maxQty) {
+    } else if (qty <= takenQty) {
       setCurrentRound({
         ...currentRound,
-        returns: { ...currentRound.returns, [itemName]: qty },
+        returns: { ...currentRound.returns, [itemId]: qty },
       });
     }
   };
 
   const calculateRoundExpected = () => {
-    return Object.entries(currentRound.items).reduce((sum, [name, qty]) => {
-      const item = allItems.find((i) => i.name === name);
+    return Object.entries(currentRound.items).reduce((sum, [itemId, qty]) => {
+      const item = menuItems.find((i) => i._id === itemId);
       return sum + item.price * qty;
     }, 0);
   };
 
   const calculateRoundReturns = () => {
-    return Object.entries(currentRound.returns).reduce((sum, [name, qty]) => {
-      const item = allItems.find((i) => i.name === name);
+    return Object.entries(currentRound.returns).reduce((sum, [itemId, qty]) => {
+      const item = menuItems.find((i) => i._id === itemId);
       return sum + item.price * qty;
     }, 0);
   };
@@ -138,13 +147,27 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
 
     const roundData = {
       number: rounds.length + 1,
-      items: Object.entries(currentRound.items).map(([name, qty]) => {
-        const item = allItems.find((i) => i.name === name);
-        return { ...item, quantity: qty, total: item.price * qty };
+      items: Object.entries(currentRound.items).map(([itemId, qty]) => {
+        const item = menuItems.find((i) => i._id === itemId);
+        return {
+          _id: item._id,
+          name: item.name,
+          icon: item.icon,
+          price: item.price,
+          quantity: qty,
+          total: item.price * qty,
+        };
       }),
-      returns: Object.entries(currentRound.returns).map(([name, qty]) => {
-        const item = allItems.find((i) => i.name === name);
-        return { ...item, quantity: qty, total: item.price * qty };
+      returns: Object.entries(currentRound.returns).map(([itemId, qty]) => {
+        const item = menuItems.find((i) => i._id === itemId);
+        return {
+          _id: item._id,
+          name: item.name,
+          icon: item.icon,
+          price: item.price,
+          quantity: qty,
+          total: item.price * qty,
+        };
       }),
       expected: currentRoundExpected,
       returnsAmount: currentRoundReturns,
@@ -189,16 +212,17 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
       const itemsSummary = {};
 
       allItems.forEach((item) => {
-        if (!itemsSummary[item.name]) {
-          itemsSummary[item.name] = {
+        if (!itemsSummary[item._id]) {
+          itemsSummary[item._id] = {
+            menuItem: item._id,
             name: item.name,
             quantity: 0,
             price: item.price,
             total: 0,
           };
         }
-        itemsSummary[item.name].quantity += item.quantity;
-        itemsSummary[item.name].total += item.total;
+        itemsSummary[item._id].quantity += item.quantity;
+        itemsSummary[item._id].total += item.total;
       });
 
       const isSplit = settlement.cash > 0 && settlement.mpesa > 0;
@@ -209,9 +233,7 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
         items: Object.values(itemsSummary),
         totalAmount: adjustedExpected,
         paymentMethod: isSplit
-          ? settlement.mpesa >= settlement.cash
-            ? "mpesa"
-            : "cash"
+          ? "split"
           : settlement.mpesa > 0
           ? "mpesa"
           : "cash",
@@ -276,33 +298,68 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
 
   const outstandingCredits = credits.filter((c) => !c.isPaid);
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading menu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8 text-center">
+        <p className="text-red-600 font-medium">{error}</p>
+        <button
+          onClick={fetchData}
+          className="mt-4 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 pb-32">
       {/* Header */}
-      <div className="bg-[#E4002B] rounded-3xl shadow-xl p-6">
-        <div className="flex justify-between items-start flex-wrap gap-4">
-          <div>
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-1">
-              Outside Catering
-            </h2>
-            <p className="text-white/90">Round-based vendor tracking</p>
-          </div>
-          <div className="flex gap-3">
-            {outstandingCredits.length > 0 && (
-              <div className="bg-white text-[#E4002B] px-4 py-2 rounded-xl text-center">
-                <p className="text-xs font-bold">Credits</p>
-                <p className="text-xl font-bold">{outstandingCredits.length}</p>
+      <div className="bg-gradient-to-r from-red-600 via-orange-600 to-red-700 rounded-3xl shadow-xl overflow-hidden">
+        <div className="p-8 relative">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
+          <div className="relative z-10">
+            <div className="flex justify-between items-start flex-wrap gap-4">
+              <div>
+                <h2 className="text-4xl font-bold text-white mb-2">
+                  Outside Catering
+                </h2>
+                <p className="text-red-100 text-lg">
+                  Round-based vendor tracking
+                </p>
               </div>
-            )}
-            {rounds.length > 0 && (
-              <button
-                onClick={() => setShowGrandCalc(true)}
-                className="bg-[#fd8200] text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center gap-2"
-              >
-                <Calculator size={20} />
-                End of Day
-              </button>
-            )}
+              <div className="flex gap-3">
+                {outstandingCredits.length > 0 && (
+                  <div className="bg-white text-red-600 px-4 py-2 rounded-xl text-center">
+                    <p className="text-xs font-bold">Credits</p>
+                    <p className="text-xl font-bold">
+                      {outstandingCredits.length}
+                    </p>
+                  </div>
+                )}
+                {rounds.length > 0 && (
+                  <button
+                    onClick={() => setShowGrandCalc(true)}
+                    className="bg-orange-500 text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center gap-2"
+                  >
+                    <Calculator size={20} />
+                    End of Day
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -315,13 +372,13 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border-2 border-gray-200">
           <p className="text-xs text-gray-600 font-bold">EXPECTED</p>
-          <p className="text-xl font-bold text-[#E4002B]">
+          <p className="text-xl font-bold text-red-600">
             KSh {totalExpected.toLocaleString()}
           </p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border-2 border-gray-200">
           <p className="text-xs text-gray-600 font-bold">CREDITS</p>
-          <p className="text-xl font-bold text-[#fd8200]">
+          <p className="text-xl font-bold text-orange-600">
             -KSh {creditAmount.toLocaleString()}
           </p>
         </div>
@@ -337,7 +394,7 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
       {rounds.length > 0 && (
         <button
           onClick={() => setShowCreditModal(true)}
-          className="w-full bg-[#fd8200] text-white px-6 py-4 rounded-xl font-bold hover:bg-[#E4002B] transition-all flex items-center justify-center gap-2"
+          className="w-full bg-orange-500 text-white px-6 py-4 rounded-xl font-bold hover:bg-red-600 transition-all flex items-center justify-center gap-2"
         >
           <UserPlus size={20} />
           Add Credit Customer
@@ -354,7 +411,7 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
             {currentRoundExpected > 0 && (
               <button
                 onClick={startRound}
-                className="bg-[#E4002B] text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center gap-2"
+                className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center gap-2"
               >
                 <PlayCircle size={20} />
                 Start Round
@@ -374,72 +431,93 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
           )}
 
           {/* Category Filter */}
-          <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                className={`px-4 py-2 rounded-lg font-bold whitespace-nowrap transition-all ${
-                  activeCategory === cat.id
-                    ? "bg-[#E4002B] text-white"
-                    : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
+          <div className="bg-white rounded-2xl shadow-lg p-4 border border-gray-100 mb-4">
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {categories.map((category) => (
+                <button
+                  key={category._id}
+                  onClick={() => setActiveCategory(category._id)}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all duration-200 ${
+                    activeCategory === category._id
+                      ? "bg-gradient-to-r from-red-600 to-orange-600 text-white shadow-lg scale-105"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-102"
+                  }`}
+                >
+                  <span className="text-2xl">{category.icon || "📦"}</span>
+                  <span>{category.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Items Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {filteredItems.map((item) => {
-              const qty = currentRound.items[item.name] || 0;
-
+              const qty = currentRound.items[item._id] || 0;
               return (
                 <div
-                  key={item.name}
-                  className={`bg-white border-2 rounded-xl p-4 transition-all ${
-                    qty > 0 ? "border-[#E4002B] shadow-md" : "border-gray-200"
+                  key={item._id}
+                  className={`bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 p-6 flex flex-col items-center ${
+                    qty > 0
+                      ? "ring-4 ring-red-400 shadow-2xl scale-105"
+                      : "hover:scale-105"
                   }`}
                 >
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-3xl">{item.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-gray-900 truncate">
-                        {item.name}
-                      </h4>
-                      <p className="text-sm text-gray-600">
-                        KSh {item.price}/{item.unit}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateQuantity(item.name, qty - 1)}
-                      disabled={qty === 0}
-                      className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 disabled:opacity-30 flex items-center justify-center"
-                    >
-                      <Minus size={16} />
-                    </button>
+                  <div className="text-7xl mb-4">{item.icon || "🍽️"}</div>
+                  <h4 className="font-bold text-lg text-gray-900 text-center mb-2 min-h-[3.5rem] flex items-center">
+                    {item.name}
+                  </h4>
+                  <p className="text-2xl font-bold text-red-600 mb-4">
+                    KSh {item.price}
+                  </p>
+                  <div className="w-full">
                     <input
                       type="number"
                       min="0"
-                      value={qty}
-                      onFocus={(e) =>
-                        e.target.value === "0" && (e.target.value = "")
-                      }
-                      onChange={(e) =>
-                        updateQuantity(item.name, parseInt(e.target.value) || 0)
-                      }
-                      className="flex-1 h-9 text-center border-2 border-gray-300 rounded-lg font-bold focus:outline-none focus:border-[#E4002B]"
+                      value={qty === 0 ? "" : qty}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          updateQuantity(item._id, 0);
+                        } else {
+                          updateQuantity(item._id, parseInt(value) || 0);
+                        }
+                      }}
+                      onFocus={(e) => {
+                        if (e.target.value === "0") {
+                          e.target.value = "";
+                        }
+                      }}
+                      placeholder="0"
+                      className="w-full h-14 text-center border-3 border-gray-300 rounded-xl font-bold text-2xl focus:border-red-500 focus:ring-4 focus:ring-red-200 focus:outline-none transition-all"
                     />
-                    <button
-                      onClick={() => updateQuantity(item.name, qty + 1)}
-                      className="w-9 h-9 rounded-lg bg-[#E4002B] text-white hover:bg-[#fd8200] flex items-center justify-center"
-                    >
-                      <Plus size={16} />
-                    </button>
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                      <button
+                        onClick={() => updateQuantity(item._id, qty + 1)}
+                        className="py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105"
+                      >
+                        +1
+                      </button>
+                      <button
+                        onClick={() => updateQuantity(item._id, qty + 5)}
+                        className="py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105"
+                      >
+                        +5
+                      </button>
+                      <button
+                        onClick={() => updateQuantity(item._id, 0)}
+                        disabled={qty === 0}
+                        className="py-2 rounded-lg bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
+                  {qty > 0 && (
+                    <div className="mt-3 bg-red-100 text-red-700 px-4 py-2 rounded-full text-sm font-bold">
+                      {qty} in round
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -457,7 +535,7 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
             </div>
             <button
               onClick={() => setShowReturnsModal(true)}
-              className="bg-[#E4002B] text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center gap-2"
+              className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center gap-2"
             >
               <CheckCircle size={20} />
               Vendor Returned
@@ -476,14 +554,14 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
           <div className="space-y-2">
             <p className="text-sm font-bold text-gray-600">ITEMS TAKEN:</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {Object.entries(currentRound.items).map(([name, qty]) => {
-                const item = allItems.find((i) => i.name === name);
+              {Object.entries(currentRound.items).map(([itemId, qty]) => {
+                const item = menuItems.find((i) => i._id === itemId);
                 return (
                   <div
-                    key={name}
+                    key={itemId}
                     className="bg-gray-50 rounded-lg p-3 border border-gray-200"
                   >
-                    <span className="mr-1">{item.icon}</span>
+                    <span className="mr-1">{item.icon || "🍽️"}</span>
                     <span className="font-bold text-gray-900">{qty}</span>{" "}
                     {item.name}
                   </div>
@@ -515,7 +593,7 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-600">Net Total</p>
-                    <p className="text-2xl font-bold text-[#E4002B]">
+                    <p className="text-2xl font-bold text-red-600">
                       KSh {round.netTotal.toLocaleString()}
                     </p>
                   </div>
@@ -532,14 +610,14 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {round.items.map((item, i) => {
                     const returned = round.returns.find(
-                      (r) => r.name === item.name
+                      (r) => r._id === item._id
                     );
                     return (
                       <div
                         key={i}
                         className="text-sm bg-white rounded-lg p-2 border border-gray-200"
                       >
-                        <span className="mr-1">{item.icon}</span>
+                        <span className="mr-1">{item.icon || "🍽️"}</span>
                         <span className="font-bold text-gray-900">
                           {item.quantity}
                         </span>
@@ -579,7 +657,7 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
                   <p className="text-sm text-gray-600">{credit.date}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-[#E4002B] mb-2">
+                  <p className="text-2xl font-bold text-red-600 mb-2">
                     KSh {credit.amount.toLocaleString()}
                   </p>
                   <button
@@ -637,68 +715,81 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
             </p>
 
             <div className="space-y-3 mb-6">
-              {Object.entries(currentRound.items).map(([name, takenQty]) => {
-                const item = allItems.find((i) => i.name === name);
-                const returnQty = currentRound.returns[name] || 0;
+              {Object.entries(currentRound.items).map(([itemId, takenQty]) => {
+                const item = menuItems.find((i) => i._id === itemId);
+                const returnQty = currentRound.returns[itemId] || 0;
 
                 return (
                   <div
-                    key={name}
+                    key={itemId}
                     className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200"
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-2xl">{item.icon}</span>
+                        <span className="text-2xl">{item.icon || "🍽️"}</span>
                         <div>
                           <h4 className="font-bold text-gray-900">
                             {item.name}
                           </h4>
                           <p className="text-xs text-gray-600">
-                            Taken: {takenQty} | KSh {item.price} each
+                            Taken: {takenQty} | KSh {item.price} each{" "}
                           </p>
                         </div>
                       </div>
+                      <span className="text-sm text-gray-600">
+                        Max: {takenQty}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
+
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={() =>
-                          updateReturnQuantity(name, returnQty - 1)
+                          updateReturnQuantity(itemId, returnQty - 1)
                         }
                         disabled={returnQty === 0}
-                        className="w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 disabled:opacity-30 flex items-center justify-center"
+                        className="w-12 h-12 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                       >
-                        <Minus size={16} />
+                        <Minus size={20} />
                       </button>
+
                       <input
                         type="number"
                         min="0"
                         max={takenQty}
-                        value={returnQty}
-                        onFocus={(e) =>
-                          e.target.value === "0" && (e.target.value = "")
-                        }
+                        value={returnQty === 0 ? "" : returnQty}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
-                          updateReturnQuantity(
-                            name,
-                            val > takenQty ? takenQty : val
-                          );
+                          const value = e.target.value;
+                          if (value === "") {
+                            updateReturnQuantity(itemId, 0);
+                          } else {
+                            const numValue = parseInt(value) || 0;
+                            updateReturnQuantity(
+                              itemId,
+                              Math.min(numValue, takenQty)
+                            );
+                          }
                         }}
-                        className="flex-1 h-9 text-center border-2 border-gray-300 rounded-lg font-bold focus:outline-none focus:border-red-500"
+                        placeholder="0"
+                        className="flex-1 h-12 text-center border-2 border-gray-300 rounded-xl font-bold text-xl focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
                       />
+
                       <button
                         onClick={() =>
-                          updateReturnQuantity(name, returnQty + 1)
+                          updateReturnQuantity(itemId, returnQty + 1)
                         }
                         disabled={returnQty >= takenQty}
-                        className="w-9 h-9 rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-30 flex items-center justify-center"
+                        className="w-12 h-12 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                       >
-                        <Plus size={16} />
+                        <Plus size={20} />
                       </button>
-                      <span className="text-sm text-gray-600 ml-2">
-                        / {takenQty}
-                      </span>
                     </div>
+
+                    {returnQty > 0 && (
+                      <div className="mt-3 bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-bold text-center">
+                        Returning {returnQty} × KSh {item.price} = KSh{" "}
+                        {(returnQty * item.price).toLocaleString()}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -706,18 +797,16 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
 
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  setShowReturnsModal(false);
-                  setCurrentRound({ ...currentRound, returns: {} });
-                }}
-                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50"
+                onClick={() => setShowReturnsModal(false)}
+                className="flex-1 bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-300 transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={completeRound}
-                className="flex-1 px-6 py-3 rounded-xl bg-[#E4002B] text-white font-bold hover:bg-black"
+                className="flex-1 bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center justify-center gap-2"
               >
+                <CheckCircle size={20} />
                 Complete Round
               </button>
             </div>
@@ -728,13 +817,13 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
       {/* Grand Calculation Modal */}
       {showGrandCalc && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
             <h3 className="text-2xl font-bold text-gray-900 mb-4">
               End of Day Settlement
             </h3>
 
-            <div className="space-y-3 mb-6">
-              <div className="bg-gray-50 rounded-xl p-3 flex justify-between">
+            <div className="bg-blue-50 rounded-xl p-4 mb-4 border-2 border-blue-200">
+              <div className="flex justify-between mb-2">
                 <span className="text-sm font-bold text-gray-600">
                   Total Expected:
                 </span>
@@ -742,16 +831,18 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
                   KSh {totalExpected.toLocaleString()}
                 </span>
               </div>
-              <div className="bg-red-50 rounded-xl p-3 flex justify-between">
-                <span className="text-sm font-bold text-gray-600">
-                  Credits (Today):
-                </span>
-                <span className="font-bold text-[#fd8200]">
-                  -KSh {creditAmount.toLocaleString()}
-                </span>
-              </div>
-              <div className="bg-green-50 rounded-xl p-3 flex justify-between">
-                <span className="text-sm font-bold text-gray-600">
+              {creditAmount > 0 && (
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm font-bold text-gray-600">
+                    Credits:
+                  </span>
+                  <span className="font-bold text-red-600">
+                    -KSh {creditAmount.toLocaleString()}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between border-t-2 border-blue-200 pt-2">
+                <span className="text-sm font-bold text-gray-900">
                   Net Expected:
                 </span>
                 <span className="text-xl font-bold text-green-600">
@@ -763,77 +854,97 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Cash Received
+                  Cash Collected (KSh)
                 </label>
                 <input
                   type="number"
-                  value={settlement.cash || ""}
-                  onFocus={(e) =>
-                    e.target.value === "0" && (e.target.value = "")
-                  }
+                  min="0"
+                  value={settlement.cash === 0 ? "" : settlement.cash}
                   onChange={(e) =>
                     setSettlement({
                       ...settlement,
-                      cash: Number(e.target.value) || 0,
+                      cash: parseFloat(e.target.value) || 0,
                     })
                   }
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg font-bold focus:border-[#E4002B] focus:outline-none"
                   placeholder="0"
+                  className="w-full h-14 px-4 text-xl border-2 border-gray-300 rounded-xl font-bold focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
-                  M-Pesa Received
+                  M-Pesa Collected (KSh)
                 </label>
                 <input
                   type="number"
-                  value={settlement.mpesa || ""}
-                  onFocus={(e) =>
-                    e.target.value === "0" && (e.target.value = "")
-                  }
+                  min="0"
+                  value={settlement.mpesa === 0 ? "" : settlement.mpesa}
                   onChange={(e) =>
                     setSettlement({
                       ...settlement,
-                      mpesa: Number(e.target.value) || 0,
+                      mpesa: parseFloat(e.target.value) || 0,
                     })
                   }
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg font-bold focus:border-[#E4002B] focus:outline-none"
                   placeholder="0"
+                  className="w-full h-14 px-4 text-xl border-2 border-gray-300 rounded-xl font-bold focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
                 />
               </div>
             </div>
 
-            <div className="bg-gray-900 rounded-xl p-4 mb-6 text-white">
-              <div className="flex justify-between mb-2">
-                <span className="font-bold">Total Collected:</span>
-                <span className="text-xl font-bold">
-                  KSh {totalCollected.toLocaleString()}
-                </span>
+            {totalCollected > 0 && (
+              <div
+                className={`rounded-xl p-4 mb-4 border-2 ${
+                  difference === 0
+                    ? "bg-green-50 border-green-200"
+                    : difference > 0
+                    ? "bg-blue-50 border-blue-200"
+                    : "bg-red-50 border-red-200"
+                }`}
+              >
+                <div className="flex justify-between mb-2">
+                  <span className="text-sm font-bold text-gray-600">
+                    Total Collected:
+                  </span>
+                  <span className="font-bold text-gray-900">
+                    KSh {totalCollected.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center border-t-2 pt-2">
+                  <span className="text-sm font-bold text-gray-900">
+                    Difference:
+                  </span>
+                  <span
+                    className={`text-xl font-bold ${
+                      difference === 0
+                        ? "text-green-600"
+                        : difference > 0
+                        ? "text-blue-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {difference === 0
+                      ? "Perfect!"
+                      : difference > 0
+                      ? `+KSh ${difference.toLocaleString()}`
+                      : `KSh ${difference.toLocaleString()}`}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between border-t border-white/20 pt-2">
-                <span className="font-bold">Difference:</span>
-                <span
-                  className={`text-xl font-bold ${
-                    difference >= 0 ? "text-green-400" : "text-red-400"
-                  }`}
-                >
-                  {difference >= 0 ? "+" : ""}KSh {difference.toLocaleString()}
-                </span>
-              </div>
-            </div>
+            )}
 
             <div className="flex gap-3">
               <button
                 onClick={() => setShowGrandCalc(false)}
-                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50"
+                className="flex-1 bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-300 transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleGrandCalculation}
-                className="flex-1 px-6 py-3 rounded-xl bg-[#E4002B] text-white font-bold hover:bg-black"
+                className="flex-1 bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition-all flex items-center justify-center gap-2"
               >
-                Complete
+                <Calculator size={20} />
+                Record Settlement
               </button>
             </div>
           </div>
@@ -843,12 +954,21 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
       {/* Credit Customer Modal */}
       {showCreditModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">
-              Add Credit Customer
-            </h3>
-            <p className="text-sm text-gray-600 mb-6">
-              This amount will be deducted from today's expected total
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-2xl font-bold text-gray-900">
+                Add Credit Customer
+              </h3>
+              <button
+                onClick={() => setShowCreditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">
+              Record a credit sale - this will reduce today's expected total
             </p>
 
             <div className="space-y-4 mb-6">
@@ -865,28 +985,29 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
                       name: e.target.value,
                     })
                   }
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg focus:border-[#E4002B] focus:outline-none"
-                  placeholder="Enter name"
+                  placeholder="Enter customer name"
+                  className="w-full h-12 px-4 border-2 border-gray-300 rounded-xl font-medium focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Amount Owed (KSh)
+                  Credit Amount (KSh)
                 </label>
                 <input
                   type="number"
-                  value={creditCustomer.amount || ""}
-                  onFocus={(e) =>
-                    e.target.value === "0" && (e.target.value = "")
+                  min="0"
+                  value={
+                    creditCustomer.amount === 0 ? "" : creditCustomer.amount
                   }
                   onChange={(e) =>
                     setCreditCustomer({
                       ...creditCustomer,
-                      amount: Number(e.target.value) || 0,
+                      amount: parseFloat(e.target.value) || 0,
                     })
                   }
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg font-bold focus:border-[#E4002B] focus:outline-none"
                   placeholder="0"
+                  className="w-full h-14 px-4 text-xl border-2 border-gray-300 rounded-xl font-bold focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
                 />
               </div>
             </div>
@@ -894,14 +1015,15 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCreditModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl border-2 border-gray-300 text-gray-700 font-bold hover:bg-gray-50"
+                className="flex-1 bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-bold hover:bg-gray-300 transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddCredit}
-                className="flex-1 px-6 py-3 rounded-xl bg-[#E4002B] text-white font-bold hover:bg-black"
+                className="flex-1 bg-orange-500 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-600 transition-all flex items-center justify-center gap-2"
               >
+                <UserPlus size={20} />
                 Add Credit
               </button>
             </div>
@@ -911,3 +1033,5 @@ export const OutsideCatering = ({ credits, onCreateSale, onCollectCredit }) => {
     </div>
   );
 };
+
+export default OutsideCatering;

@@ -134,20 +134,16 @@ export const Dashboard = ({ summaryData, credits }) => {
   };
 
   return (
-    <div className="min-h-screen bg-white p-4 md:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 via-pink-50 to-rose-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="bg-black rounded-2xl shadow-lg p-6">
+        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 rounded-3xl shadow-2xl p-8">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <TrendingUp className="w-8 h-8 text-orange-500" />
-                <h2 className="text-3xl font-bold text-white">Dashboard</h2>
-              </div>
               {summaryData?.date && (
-                <div className="flex items-center gap-2 bg-white bg-opacity-10 px-3 py-1 rounded-lg w-fit">
-                  <Calendar className="w-4 h-4 text-white" />
-                  <p className="text-sm text-white font-medium">
+                <div className="flex items-center gap-3 bg-white bg-opacity-20 px-5 py-3 rounded-xl w-fit backdrop-blur-sm">
+                  <Calendar className="w-6 h-6 text-white" />
+                  <p className="text-lg text-white font-bold">
                     {new Date(summaryData.date).toLocaleDateString("en-US", {
                       weekday: "long",
                       month: "long",
@@ -159,17 +155,17 @@ export const Dashboard = ({ summaryData, credits }) => {
             </div>
 
             {user && (
-              <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border-2 border-orange-500">
-                <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
-                  <User className="w-5 h-5 text-white" />
+              <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-xl shadow-lg border-2 border-red-500">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-md">
+                  <User className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <p className="font-bold text-black text-sm">
+                  <p className="font-bold text-gray-900 text-base">
                     {user.fullName}
                   </p>
                   <div className="flex items-center gap-1">
-                    <Shield className="w-3 h-3 text-orange-500" />
-                    <span className="text-xs font-bold text-orange-500 uppercase">
+                    <Shield className="w-4 h-4 text-red-600" />
+                    <span className="text-xs font-bold text-red-600 uppercase">
                       {user.role}
                     </span>
                   </div>
@@ -180,16 +176,16 @@ export const Dashboard = ({ summaryData, credits }) => {
         </div>
 
         {/* Total Revenue Card */}
-        <div className="bg-orange-500 rounded-2xl shadow-lg p-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-white rounded-lg">
-              <DollarSign size={28} className="text-orange-500" />
+        <div className="bg-gradient-to-br from-red-500 via-rose-500 to-red-600 rounded-3xl shadow-2xl p-8">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="p-4 bg-white rounded-xl shadow-lg">
+              <DollarSign size={32} className="text-red-600" />
             </div>
             <div>
-              <h3 className="text-white text-base font-bold">
+              <h3 className="text-white text-xl font-bold">
                 {canViewFullDashboard ? "TOTAL REVENUE" : "TODAY'S SALES"}
               </h3>
-              <p className="text-white text-sm opacity-90">
+              <p className="text-white text-base opacity-90">
                 {canViewFullDashboard
                   ? "All paid transactions today"
                   : "Your transactions today"}
@@ -198,37 +194,39 @@ export const Dashboard = ({ summaryData, credits }) => {
           </div>
 
           <div className="flex items-end gap-3 mb-6">
-            <p className="text-white text-5xl font-bold">
+            <p className="text-white text-6xl font-bold">
               {formatCurrency(analytics.grandTotal)}
             </p>
-            <div className="flex items-center gap-1 bg-white bg-opacity-20 px-3 py-1 rounded-lg mb-1">
-              <ArrowUp size={16} className="text-white" />
-              <span className="text-white text-sm font-bold">LIVE</span>
+            <div className="flex items-center gap-2 bg-white bg-opacity-20 px-4 py-2 rounded-xl mb-2 backdrop-blur-sm">
+              <ArrowUp size={20} className="text-white" />
+              <span className="text-white text-base font-bold">LIVE</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white bg-opacity-20 rounded-lg p-3">
-              <p className="text-white text-xs mb-1">Transactions</p>
-              <p className="text-white text-xl font-bold">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
+              <p className="text-white text-sm mb-2 font-medium">
+                Transactions
+              </p>
+              <p className="text-white text-2xl font-bold">
                 {analytics.walkInCount + analytics.cateringCount}
               </p>
             </div>
-            <div className="bg-white bg-opacity-20 rounded-lg p-3">
-              <p className="text-white text-xs mb-1">Walk-In</p>
-              <p className="text-white text-xl font-bold">
+            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
+              <p className="text-white text-sm mb-2 font-medium">Walk-In</p>
+              <p className="text-white text-2xl font-bold">
                 {analytics.walkInCount}
               </p>
             </div>
-            <div className="bg-white bg-opacity-20 rounded-lg p-3">
-              <p className="text-white text-xs mb-1">Catering</p>
-              <p className="text-white text-xl font-bold">
+            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
+              <p className="text-white text-sm mb-2 font-medium">Catering</p>
+              <p className="text-white text-2xl font-bold">
                 {analytics.cateringCount}
               </p>
             </div>
-            <div className="bg-white bg-opacity-20 rounded-lg p-3">
-              <p className="text-white text-xs mb-1">Pending</p>
-              <p className="text-white text-xl font-bold">
+            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
+              <p className="text-white text-sm mb-2 font-medium">Pending</p>
+              <p className="text-white text-2xl font-bold">
                 {analytics.creditCount}
               </p>
             </div>
@@ -237,150 +235,222 @@ export const Dashboard = ({ summaryData, credits }) => {
 
         {/* Stats Grid */}
         {canViewSales && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Walk-In Card */}
-            <div className="bg-white rounded-xl shadow-lg p-5 border-2 border-black hover:shadow-xl transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="p-3 bg-black rounded-lg">
-                  <ShoppingCart size={24} className="text-white" />
+            <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-red-500 hover:shadow-2xl transition-all">
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
+                  <ShoppingCart size={28} className="text-white" />
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-gray-500 uppercase">
+                  <p className="text-xs font-bold text-gray-600 uppercase">
                     Walk-In
                   </p>
-                  <p className="text-xs text-gray-400 font-medium mt-1">
+                  <p className="text-xs text-gray-500 font-medium mt-1">
                     {analytics.walkInCount} sales
                   </p>
                 </div>
               </div>
-              <p className="text-2xl font-bold text-black mb-2">
+              <p className="text-3xl font-bold text-gray-900 mb-3">
                 {formatCurrency(analytics.walkInTotal)}
               </p>
-              <div className="flex items-center gap-2 text-sm text-orange-500 font-medium">
-                <TrendingUp size={14} />
+              <div className="flex items-center gap-2 text-sm text-red-600 font-bold">
+                <TrendingUp size={16} />
                 <span>Active today</span>
               </div>
             </div>
 
             {/* Catering Card */}
-            <div className="bg-white rounded-xl shadow-lg p-5 border-2 border-black hover:shadow-xl transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="p-3 bg-black rounded-lg">
-                  <Package size={24} className="text-white" />
+            <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-red-500 hover:shadow-2xl transition-all">
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
+                  <Package size={28} className="text-white" />
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-gray-500 uppercase">
+                  <p className="text-xs font-bold text-gray-600 uppercase">
                     Catering
                   </p>
-                  <p className="text-xs text-gray-400 font-medium mt-1">
+                  <p className="text-xs text-gray-500 font-medium mt-1">
                     {analytics.cateringCount} paid
                   </p>
                 </div>
               </div>
-              <p className="text-2xl font-bold text-black mb-2">
+              <p className="text-3xl font-bold text-gray-900 mb-3">
                 {formatCurrency(analytics.cateringPaid)}
               </p>
-              <div className="flex items-center gap-2 text-sm text-orange-500 font-medium">
-                <TrendingUp size={14} />
+              <div className="flex items-center gap-2 text-sm text-red-600 font-bold">
+                <TrendingUp size={16} />
                 <span>Completed</span>
               </div>
             </div>
 
             {/* Pending Credit Card */}
-            <div className="bg-white rounded-xl shadow-lg p-5 border-2 border-red-500 hover:shadow-xl transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="p-3 bg-red-500 rounded-lg">
-                  <Clock size={24} className="text-white" />
+            <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-rose-500 hover:shadow-2xl transition-all">
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-gradient-to-br from-rose-500 to-red-600 rounded-xl shadow-md">
+                  <Clock size={28} className="text-white" />
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-gray-500 uppercase">
+                  <p className="text-xs font-bold text-gray-600 uppercase">
                     Pending
                   </p>
-                  <p className="text-xs text-gray-400 font-medium mt-1">
+                  <p className="text-xs text-gray-500 font-medium mt-1">
                     {analytics.creditCount} credits
                   </p>
                 </div>
               </div>
-              <p className="text-2xl font-bold text-black mb-2">
+              <p className="text-3xl font-bold text-gray-900 mb-3">
                 {formatCurrency(analytics.creditTotal)}
               </p>
-              <div className="flex items-center gap-2 text-sm text-red-500 font-medium">
-                <AlertCircle size={14} />
+              <div className="flex items-center gap-2 text-sm text-rose-600 font-bold">
+                <AlertCircle size={16} />
                 <span>Awaiting payment</span>
               </div>
             </div>
           </div>
         )}
 
+        {/* Payment Methods - M-PESA and Cash Totals */}
+        {canViewFullDashboard &&
+          (analytics.mpesaTotal > 0 || analytics.cashTotal > 0) && (
+            <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-red-500">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
+                  <DollarSign size={28} className="text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900">
+                  Payment Methods Breakdown
+                </h3>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-6">
+                {/* M-PESA */}
+                <div className="p-6 rounded-2xl border-2 border-red-500 hover:shadow-xl transition-all bg-gradient-to-br from-green-50 to-emerald-50">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl shadow-md">
+                      <Smartphone className="w-6 h-6 text-white" />
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 uppercase">
+                      M-PESA
+                    </p>
+                  </div>
+                  <div className="flex items-end justify-between">
+                    <p className="text-3xl font-bold text-gray-900">
+                      {formatCurrency(analytics.mpesaTotal)}
+                    </p>
+                    <p className="text-xl font-bold text-gray-500">
+                      {analytics.mpesaCount}{" "}
+                      <span className="text-sm">txns</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Cash */}
+                <div className="p-6 rounded-2xl border-2 border-red-500 hover:shadow-xl transition-all bg-gradient-to-br from-amber-50 to-yellow-50">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 bg-gradient-to-br from-amber-600 to-yellow-600 rounded-xl shadow-md">
+                      <Banknote className="w-6 h-6 text-white" />
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 uppercase">
+                      CASH
+                    </p>
+                  </div>
+                  <div className="flex items-end justify-between">
+                    <p className="text-3xl font-bold text-gray-900">
+                      {formatCurrency(analytics.cashTotal)}
+                    </p>
+                    <p className="text-xl font-bold text-gray-500">
+                      {analytics.cashCount}{" "}
+                      <span className="text-sm">txns</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Split Payment Info */}
+              {analytics.splitCount > 0 && (
+                <div className="mt-6 p-5 bg-red-50 rounded-xl border-2 border-red-200">
+                  <p className="text-sm font-bold text-gray-700 mb-2">
+                    Note: Split Payments ({analytics.splitCount} transactions)
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Split payments of {formatCurrency(analytics.splitTotal)} are
+                    included in the M-PESA and Cash totals above based on their
+                    respective portions.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
         {/* Walk-In Sales Section */}
         {canViewSales && analytics.walkInSales.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden border-2 border-black">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-red-500">
             <button
               onClick={() => setExpandedWalkIn(!expandedWalkIn)}
-              className="w-full p-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              className="w-full p-6 flex items-center justify-between hover:bg-red-50 transition-colors"
             >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-black rounded-lg">
-                  <ShoppingCart size={20} className="text-white" />
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
+                  <ShoppingCart size={24} className="text-white" />
                 </div>
                 <div className="text-left">
-                  <h3 className="text-xl font-bold text-black">
+                  <h3 className="text-2xl font-bold text-gray-900">
                     Walk-In Sales
                   </h3>
-                  <p className="text-sm text-orange-500 font-medium">
+                  <p className="text-base text-red-600 font-bold">
                     {analytics.walkInSales.length} transactions •{" "}
                     {formatCurrency(analytics.walkInTotal)}
                   </p>
                 </div>
               </div>
               {expandedWalkIn ? (
-                <ChevronUp className="w-6 h-6 text-black" />
+                <ChevronUp className="w-7 h-7 text-gray-900" />
               ) : (
-                <ChevronDown className="w-6 h-6 text-black" />
+                <ChevronDown className="w-7 h-7 text-gray-900" />
               )}
             </button>
 
             {expandedWalkIn && (
-              <div className="p-5 pt-0 space-y-3 max-h-[600px] overflow-y-auto">
+              <div className="p-6 pt-0 space-y-4 max-h-[600px] overflow-y-auto">
                 {analytics.walkInSales.map((sale, idx) => (
                   <div
                     key={sale._id || idx}
-                    className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200 hover:border-black transition-all"
+                    className="p-5 bg-gradient-to-r from-red-50 to-rose-50 rounded-xl border-2 border-red-200 hover:border-red-500 transition-all"
                   >
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="px-3 py-1 bg-black text-white font-bold text-xs rounded">
+                          <span className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold text-sm rounded-lg shadow-md">
                             {formatTime(sale.timestamp)}
                           </span>
-                          <span className="text-xs text-gray-500 font-medium">
+                          <span className="text-sm text-gray-600 font-bold">
                             #{idx + 1}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-600 font-medium">
+                        <p className="text-sm text-gray-700 font-bold">
                           👤 {sale.recordedBy?.fullName || "Unknown"}
                         </p>
                       </div>
                       <div className="text-right">
-                        <span className="text-2xl font-bold text-black">
+                        <span className="text-3xl font-bold text-gray-900">
                           {formatCurrency(sale.totalAmount)}
                         </span>
                       </div>
                     </div>
 
-                    <div className="space-y-2 mb-3 bg-white rounded-lg p-3 border border-gray-200">
+                    <div className="space-y-2 mb-4 bg-white rounded-xl p-4 border-2 border-red-100 shadow-sm">
                       {sale.items?.map((item, itemIdx) => (
                         <div
                           key={itemIdx}
                           className="flex justify-between items-center text-sm"
                         >
-                          <span className="font-medium text-gray-800">
+                          <span className="font-bold text-gray-800">
                             {item.name}{" "}
-                            <span className="text-orange-500">
+                            <span className="text-red-600">
                               ×{item.quantity}
                             </span>
                           </span>
-                          <span className="font-bold text-black">
+                          <span className="font-bold text-gray-900">
                             {formatCurrency(item.total)}
                           </span>
                         </div>
@@ -389,12 +459,12 @@ export const Dashboard = ({ summaryData, credits }) => {
 
                     <div className="flex items-center gap-2">
                       <div
-                        className={`flex items-center gap-2 px-3 py-1 rounded font-bold text-xs ${
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm shadow-md ${
                           sale.paymentMethod === "mpesa"
-                            ? "bg-black text-white"
+                            ? "bg-gradient-to-r from-green-600 to-emerald-600 text-white"
                             : sale.paymentMethod === "split"
-                            ? "bg-orange-500 text-white"
-                            : "bg-gray-700 text-white"
+                            ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
+                            : "bg-gradient-to-r from-gray-700 to-gray-800 text-white"
                         }`}
                       >
                         {getPaymentIcon(sale.paymentMethod)}
@@ -405,7 +475,7 @@ export const Dashboard = ({ summaryData, credits }) => {
                           : "CASH"}
                       </div>
                       {sale.mpesaCode && (
-                        <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+                        <span className="text-sm text-gray-600 font-mono bg-gray-100 px-3 py-2 rounded-lg border border-gray-300">
                           {sale.mpesaCode}
                         </span>
                       )}
@@ -419,81 +489,81 @@ export const Dashboard = ({ summaryData, credits }) => {
 
         {/* Catering Sales Section */}
         {canViewSales && analytics.cateringSales.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden border-2 border-black">
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-red-500">
             <button
               onClick={() => setExpandedCatering(!expandedCatering)}
-              className="w-full p-5 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              className="w-full p-6 flex items-center justify-between hover:bg-red-50 transition-colors"
             >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-black rounded-lg">
-                  <Package size={20} className="text-white" />
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
+                  <Package size={24} className="text-white" />
                 </div>
                 <div className="text-left">
-                  <h3 className="text-xl font-bold text-black">
+                  <h3 className="text-2xl font-bold text-gray-900">
                     Outside Catering Orders
                   </h3>
-                  <p className="text-sm text-orange-500 font-medium">
+                  <p className="text-base text-red-600 font-bold">
                     {analytics.cateringSales.length} orders •{" "}
                     {formatCurrency(analytics.cateringPaid)}
                   </p>
                 </div>
               </div>
               {expandedCatering ? (
-                <ChevronUp className="w-6 h-6 text-black" />
+                <ChevronUp className="w-7 h-7 text-gray-900" />
               ) : (
-                <ChevronDown className="w-6 h-6 text-black" />
+                <ChevronDown className="w-7 h-7 text-gray-900" />
               )}
             </button>
 
             {expandedCatering && (
-              <div className="p-5 pt-0 space-y-3 max-h-[600px] overflow-y-auto">
+              <div className="p-6 pt-0 space-y-4 max-h-[600px] overflow-y-auto">
                 {analytics.cateringSales.map((sale, idx) => (
                   <div
                     key={sale._id || idx}
-                    className={`p-4 rounded-lg border-2 hover:border-black transition-all ${
+                    className={`p-5 rounded-xl border-2 hover:border-red-500 transition-all ${
                       sale.isPaid
-                        ? "bg-gray-50 border-gray-200"
-                        : "bg-red-50 border-red-300"
+                        ? "bg-gradient-to-r from-red-50 to-rose-50 border-red-200"
+                        : "bg-gradient-to-r from-rose-100 to-red-100 border-rose-300"
                     }`}
                   >
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <span
-                            className={`px-3 py-1 font-bold text-xs rounded ${
+                            className={`px-4 py-2 font-bold text-sm rounded-lg shadow-md ${
                               sale.isPaid
-                                ? "bg-black text-white"
-                                : "bg-red-500 text-white"
+                                ? "bg-gradient-to-r from-red-600 to-rose-600 text-white"
+                                : "bg-gradient-to-r from-rose-600 to-red-700 text-white"
                             }`}
                           >
                             {formatTime(sale.timestamp)}
                           </span>
-                          <span className="text-xs text-gray-500 font-medium">
+                          <span className="text-sm text-gray-600 font-bold">
                             #{idx + 1}
                           </span>
                         </div>
-                        <p className="text-sm font-bold text-black mb-1">
+                        <p className="text-base font-bold text-gray-900 mb-2">
                           🏢 {sale.customerName || sale.vendorName || "N/A"}
                         </p>
-                        <p className="text-xs text-gray-600 font-medium">
+                        <p className="text-sm text-gray-700 font-bold">
                           👤 {sale.recordedBy?.fullName || "Unknown"}
                         </p>
                       </div>
                       <div className="text-right">
                         <span
-                          className={`text-2xl font-bold ${
-                            sale.isPaid ? "text-black" : "text-red-500"
+                          className={`text-3xl font-bold ${
+                            sale.isPaid ? "text-gray-900" : "text-rose-600"
                           }`}
                         >
                           {formatCurrency(sale.totalAmount)}
                         </span>
-                        <div className="mt-1">
+                        <div className="mt-2">
                           {sale.isPaid ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-black text-white text-xs font-bold rounded">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-sm font-bold rounded-lg shadow-md">
                               ✓ PAID
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-rose-600 to-red-700 text-white text-sm font-bold rounded-lg shadow-md">
                               ⏰ PENDING
                             </span>
                           )}
@@ -501,19 +571,19 @@ export const Dashboard = ({ summaryData, credits }) => {
                       </div>
                     </div>
 
-                    <div className="space-y-2 mb-3 bg-white rounded-lg p-3 border border-gray-200">
+                    <div className="space-y-2 mb-4 bg-white rounded-xl p-4 border-2 border-red-100 shadow-sm">
                       {sale.items?.map((item, itemIdx) => (
                         <div
                           key={itemIdx}
                           className="flex justify-between items-center text-sm"
                         >
-                          <span className="font-medium text-gray-800">
+                          <span className="font-bold text-gray-800">
                             {item.name}{" "}
-                            <span className="text-orange-500">
+                            <span className="text-red-600">
                               ×{item.quantity}
                             </span>
                           </span>
-                          <span className="font-bold text-black">
+                          <span className="font-bold text-gray-900">
                             {formatCurrency(item.total)}
                           </span>
                         </div>
@@ -521,14 +591,14 @@ export const Dashboard = ({ summaryData, credits }) => {
                     </div>
 
                     {sale.returnedItems?.length > 0 && (
-                      <div className="mb-3 p-2 bg-red-100 rounded-lg border-2 border-red-300">
-                        <p className="text-xs font-bold text-red-700 mb-1 uppercase">
+                      <div className="mb-4 p-3 bg-rose-100 rounded-xl border-2 border-rose-300 shadow-sm">
+                        <p className="text-sm font-bold text-rose-800 mb-2 uppercase">
                           ⚠️ Returned Items
                         </p>
                         {sale.returnedItems.map((ret, retIdx) => (
                           <p
                             key={retIdx}
-                            className="text-xs text-red-600 font-medium"
+                            className="text-sm text-rose-700 font-bold"
                           >
                             • {ret.item} ({ret.quantity}) - {ret.reason}
                           </p>
@@ -539,12 +609,12 @@ export const Dashboard = ({ summaryData, credits }) => {
                     {sale.isPaid && (
                       <div className="flex items-center gap-2">
                         <div
-                          className={`flex items-center gap-2 px-3 py-1 rounded font-bold text-xs ${
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm shadow-md ${
                             sale.paymentMethod === "mpesa"
-                              ? "bg-black text-white"
+                              ? "bg-gradient-to-r from-green-600 to-emerald-600 text-white"
                               : sale.paymentMethod === "split"
-                              ? "bg-orange-500 text-white"
-                              : "bg-gray-700 text-white"
+                              ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
+                              : "bg-gradient-to-r from-gray-700 to-gray-800 text-white"
                           }`}
                         >
                           {getPaymentIcon(sale.paymentMethod)}
@@ -555,7 +625,7 @@ export const Dashboard = ({ summaryData, credits }) => {
                             : "CASH"}
                         </div>
                         {sale.mpesaCode && (
-                          <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+                          <span className="text-sm text-gray-600 font-mono bg-gray-100 px-3 py-2 rounded-lg border border-gray-300">
                             {sale.mpesaCode}
                           </span>
                         )}
@@ -568,123 +638,51 @@ export const Dashboard = ({ summaryData, credits }) => {
           </div>
         )}
 
-        {/* Payment Methods - Separated M-PESA and Cash */}
-        {canViewFullDashboard &&
-          (analytics.mpesaTotal > 0 || analytics.cashTotal > 0) && (
-            <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-black">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-orange-500 rounded-lg">
-                  <DollarSign size={24} className="text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-black">
-                  Payment Methods Breakdown
-                </h3>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {/* M-PESA */}
-                <div className="p-5 rounded-lg border-2 border-black hover:shadow-lg transition-shadow">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-black rounded-lg">
-                      <Smartphone className="w-5 h-5 text-white" />
-                    </div>
-                    <p className="text-base font-bold text-black uppercase">
-                      M-PESA
-                    </p>
-                  </div>
-                  <div className="flex items-end justify-between">
-                    <p className="text-2xl font-bold text-black">
-                      {formatCurrency(analytics.mpesaTotal)}
-                    </p>
-                    <p className="text-lg font-bold text-gray-400">
-                      {analytics.mpesaCount}{" "}
-                      <span className="text-xs">txns</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Cash */}
-                <div className="p-5 rounded-lg border-2 border-black hover:shadow-lg transition-shadow">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-black rounded-lg">
-                      <Banknote className="w-5 h-5 text-white" />
-                    </div>
-                    <p className="text-base font-bold text-black uppercase">
-                      CASH
-                    </p>
-                  </div>
-                  <div className="flex items-end justify-between">
-                    <p className="text-2xl font-bold text-black">
-                      {formatCurrency(analytics.cashTotal)}
-                    </p>
-                    <p className="text-lg font-bold text-gray-400">
-                      {analytics.cashCount}{" "}
-                      <span className="text-xs">txns</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Split Payment Info */}
-              {analytics.splitCount > 0 && (
-                <div className="mt-4 p-4 bg-orange-50 rounded-lg border-2 border-orange-200">
-                  <p className="text-xs font-bold text-gray-600 mb-2">
-                    Note: Split Payments ({analytics.splitCount} transactions)
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    Split payments of {formatCurrency(analytics.splitTotal)} are
-                    included in the M-PESA and Cash totals above based on their
-                    respective portions.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
         {/* Outstanding Credits */}
         {canViewSales && credits.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-red-500">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-red-500 rounded-lg">
-                <AlertCircle size={24} className="text-white" />
+          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-rose-500">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 bg-gradient-to-br from-rose-500 to-red-600 rounded-xl shadow-md">
+                <AlertCircle size={28} className="text-white" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-black">
+                <h3 className="text-2xl font-bold text-gray-900">
                   Outstanding Credits
                 </h3>
-                <p className="text-sm text-red-500 font-medium">
+                <p className="text-base text-rose-600 font-bold">
                   {credits.length} pending •{" "}
                   {formatCurrency(analytics.creditTotal)}
                 </p>
               </div>
             </div>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
+            <div className="space-y-4 max-h-96 overflow-y-auto">
               {credits.map((credit, idx) => (
                 <div
                   key={idx}
-                  className="p-4 bg-red-50 rounded-lg border-2 border-red-200 hover:border-red-500 transition-all"
+                  className="p-5 bg-gradient-to-r from-rose-50 to-red-50 rounded-xl border-2 border-rose-300 hover:border-rose-500 transition-all shadow-sm"
                 >
                   <div className="flex justify-between items-start gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-black text-base mb-1 truncate">
+                      <p className="font-bold text-gray-900 text-lg mb-2 truncate">
                         🏢 {credit.customerName || credit.vendorName}
                       </p>
-                      <p className="text-sm text-gray-700 font-medium mb-2 line-clamp-2">
+                      <p className="text-sm text-gray-700 font-bold mb-3 line-clamp-2">
                         {credit.items?.map((item) => item.name).join(", ")}
                       </p>
                       {credit.date && (
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <Calendar className="w-3 h-3" />
-                          <span className="font-medium">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Calendar className="w-4 h-4" />
+                          <span className="font-bold">
                             {new Date(credit.date).toLocaleDateString()}
                           </span>
                         </div>
                       )}
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-red-500 text-xl whitespace-nowrap block mb-1">
+                      <span className="font-bold text-rose-600 text-2xl whitespace-nowrap block mb-2">
                         {formatCurrency(credit.amount)}
                       </span>
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded">
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-rose-600 to-red-700 text-white text-sm font-bold rounded-lg shadow-md">
                         UNPAID
                       </span>
                     </div>
@@ -697,14 +695,14 @@ export const Dashboard = ({ summaryData, credits }) => {
 
         {/* Vendor Welcome Message */}
         {user?.role === "vendor" && (
-          <div className="bg-black rounded-xl shadow-lg p-12 text-center">
-            <div className="inline-block p-5 bg-orange-500 rounded-xl mb-4">
-              <Package size={48} className="text-white" />
+          <div className="bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl shadow-2xl p-16 text-center">
+            <div className="inline-block p-6 bg-white bg-opacity-20 rounded-2xl mb-6 backdrop-blur-sm">
+              <Package size={56} className="text-white" />
             </div>
-            <h3 className="text-3xl font-bold text-white mb-2">
+            <h3 className="text-4xl font-bold text-white mb-3">
               Welcome, {user.fullName}! 👋
             </h3>
-            <p className="text-base text-gray-300">
+            <p className="text-xl text-white opacity-90">
               Use the sidebar to manage your products and view your sales
               performance.
             </p>
@@ -715,20 +713,20 @@ export const Dashboard = ({ summaryData, credits }) => {
         {canViewSales &&
           analytics.walkInCount === 0 &&
           analytics.cateringCount === 0 && (
-            <div className="bg-gray-50 rounded-xl shadow-lg p-16 text-center border-2 border-gray-200">
-              <TrendingDown size={64} className="text-gray-300 mx-auto mb-4" />
-              <h3 className="text-2xl font-bold text-gray-400 mb-2">
+            <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl shadow-xl p-20 text-center border-2 border-gray-200">
+              <TrendingDown size={80} className="text-gray-300 mx-auto mb-6" />
+              <h3 className="text-3xl font-bold text-gray-400 mb-3">
                 No Sales Yet Today
               </h3>
-              <p className="text-base text-gray-500">
+              <p className="text-lg text-gray-500">
                 Start recording transactions to see them appear here.
               </p>
             </div>
           )}
 
         {/* Footer */}
-        <div className="text-center py-6">
-          <p className="text-sm text-gray-500">
+        <div className="text-center py-8">
+          <p className="text-sm text-gray-500 font-medium">
             © 2024 Restaurant POS System. All rights reserved.
           </p>
         </div>
