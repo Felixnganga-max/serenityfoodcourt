@@ -19,7 +19,7 @@ import {
 const API_BASE_URL =
   "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
-export const OutsideCatering = () => {
+export default function OutsideCatering() {
   const [rounds, setRounds] = useState([]);
   const [currentRound, setCurrentRound] = useState({
     items: {},
@@ -50,22 +50,39 @@ export const OutsideCatering = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const token = localStorage.getItem("token") || "";
+  // Get token helper function
+  const getToken = () => {
+    return localStorage.getItem("token") || "";
+  };
 
   useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      setError("Authentication required. Please log in.");
+      setLoading(false);
+      return;
+    }
     fetchData();
   }, [selectedDate]);
 
   const fetchData = async () => {
+    const token = getToken();
+    if (!token) {
+      setError("Authentication required. Please log in.");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       await Promise.all([
-        fetchMenuData(),
-        fetchRounds(),
-        fetchDashboardStats(),
-        fetchCredits(),
-        fetchHistoricalData(),
+        fetchMenuData(token),
+        fetchRounds(token),
+        fetchDashboardStats(token),
+        fetchCredits(token),
+        fetchHistoricalData(token),
       ]);
+      setError("");
     } catch (err) {
       setError("Failed to fetch data");
       console.error(err);
@@ -74,7 +91,7 @@ export const OutsideCatering = () => {
     }
   };
 
-  const fetchMenuData = async () => {
+  const fetchMenuData = async (token) => {
     try {
       const [categoriesRes, menuItemsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/categories`, {
@@ -100,10 +117,11 @@ export const OutsideCatering = () => {
       }
     } catch (err) {
       console.error("Failed to fetch menu data", err);
+      throw err;
     }
   };
 
-  const fetchRounds = async () => {
+  const fetchRounds = async (token) => {
     try {
       const res = await fetch(
         `${API_BASE_URL}/outside-catering/rounds?date=${selectedDate}`,
@@ -117,10 +135,11 @@ export const OutsideCatering = () => {
       }
     } catch (err) {
       console.error("Failed to fetch rounds", err);
+      throw err;
     }
   };
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = async (token) => {
     try {
       const res = await fetch(
         `${API_BASE_URL}/outside-catering/dashboard?date=${selectedDate}`,
@@ -134,10 +153,11 @@ export const OutsideCatering = () => {
       }
     } catch (err) {
       console.error("Failed to fetch dashboard stats", err);
+      throw err;
     }
   };
 
-  const fetchCredits = async () => {
+  const fetchCredits = async (token) => {
     try {
       const res = await fetch(`${API_BASE_URL}/outside-catering/credits`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -148,10 +168,11 @@ export const OutsideCatering = () => {
       }
     } catch (err) {
       console.error("Failed to fetch credits", err);
+      throw err;
     }
   };
 
-  const fetchHistoricalData = async () => {
+  const fetchHistoricalData = async (token) => {
     try {
       const endDate = new Date().toISOString().split("T")[0];
       const startDate = new Date();
@@ -168,6 +189,7 @@ export const OutsideCatering = () => {
       }
     } catch (err) {
       console.error("Failed to fetch historical data", err);
+      throw err;
     }
   };
 
@@ -243,31 +265,49 @@ export const OutsideCatering = () => {
       return;
     }
 
+    const token = getToken();
+    if (!token) {
+      alert("❌ Authentication required. Please log in.");
+      return;
+    }
+
     try {
       const roundData = {
         roundNumber: rounds.length + 1,
-        items: Object.entries(currentRound.items).map(([itemId, qty]) => {
-          const item = menuItems.find((i) => i._id === itemId);
-          return {
-            menuItem: item._id,
-            name: item.name,
-            icon: item.icon,
-            price: item.price,
-            quantity: qty,
-            total: item.price * qty,
-          };
-        }),
-        returns: Object.entries(currentRound.returns).map(([itemId, qty]) => {
-          const item = menuItems.find((i) => i._id === itemId);
-          return {
-            menuItem: item._id,
-            name: item.name,
-            icon: item.icon,
-            price: item.price,
-            quantity: qty,
-            total: item.price * qty,
-          };
-        }),
+        items: Object.entries(currentRound.items)
+          .map(([itemId, qty]) => {
+            const item = menuItems.find((i) => i._id === itemId);
+            if (!item) {
+              console.error(`Item not found: ${itemId}`);
+              return null;
+            }
+            return {
+              menuItem: item._id,
+              name: item.name,
+              icon: item.icon || "",
+              price: item.price,
+              quantity: qty,
+              total: item.price * qty,
+            };
+          })
+          .filter(Boolean),
+        returns: Object.entries(currentRound.returns)
+          .map(([itemId, qty]) => {
+            const item = menuItems.find((i) => i._id === itemId);
+            if (!item) {
+              console.error(`Item not found: ${itemId}`);
+              return null;
+            }
+            return {
+              menuItem: item._id,
+              name: item.name,
+              icon: item.icon || "",
+              price: item.price,
+              quantity: qty,
+              total: item.price * qty,
+            };
+          })
+          .filter(Boolean),
         expectedAmount: currentRoundExpected,
         returnsAmount: currentRoundReturns,
         netTotal: currentRoundNet,
@@ -287,7 +327,7 @@ export const OutsideCatering = () => {
       const data = await res.json();
 
       if (data.success) {
-        await Promise.all([fetchRounds(), fetchDashboardStats()]);
+        await Promise.all([fetchRounds(token), fetchDashboardStats(token)]);
         setCurrentRound({
           items: {},
           returns: {},
@@ -301,7 +341,7 @@ export const OutsideCatering = () => {
           }\n💰 Your Commission: KSh ${currentCommission.toLocaleString()}`
         );
       } else {
-        throw new Error(data.error);
+        throw new Error(data.error || "Failed to record round");
       }
     } catch (error) {
       alert("❌ Failed to record round: " + error.message);
@@ -344,6 +384,12 @@ export const OutsideCatering = () => {
 
     if (totalCollected <= 0) {
       alert("Enter cash and/or M-Pesa amounts!");
+      return;
+    }
+
+    const token = getToken();
+    if (!token) {
+      alert("❌ Authentication required. Please log in.");
       return;
     }
 
@@ -390,15 +436,15 @@ export const OutsideCatering = () => {
           }`
         );
         await Promise.all([
-          fetchRounds(),
-          fetchDashboardStats(),
-          fetchHistoricalData(),
+          fetchRounds(token),
+          fetchDashboardStats(token),
+          fetchHistoricalData(token),
         ]);
         setRounds([]);
         setSettlement({ cash: 0, mpesa: 0 });
         setShowGrandCalc(false);
       } else {
-        throw new Error(data.error);
+        throw new Error(data.error || "Failed to record summary");
       }
     } catch (error) {
       alert("❌ Failed to record: " + error.message);
@@ -408,6 +454,12 @@ export const OutsideCatering = () => {
   const handleAddCredit = async () => {
     if (!creditForm.name.trim() || creditForm.amount <= 0) {
       alert("Please enter customer name and amount!");
+      return;
+    }
+
+    const token = getToken();
+    if (!token) {
+      alert("❌ Authentication required. Please log in.");
       return;
     }
 
@@ -434,9 +486,9 @@ export const OutsideCatering = () => {
         );
         setCreditForm({ name: "", phone: "", amount: 0, notes: "" });
         setShowCreditModal(false);
-        await Promise.all([fetchCredits(), fetchDashboardStats()]);
+        await Promise.all([fetchCredits(token), fetchDashboardStats(token)]);
       } else {
-        throw new Error(data.error);
+        throw new Error(data.error || "Failed to record credit");
       }
     } catch (error) {
       alert("❌ Failed to record credit: " + error.message);
@@ -447,6 +499,12 @@ export const OutsideCatering = () => {
     const method = window.confirm("Payment method:\nOK = Cash\nCancel = M-Pesa")
       ? "cash"
       : "mpesa";
+
+    const token = getToken();
+    if (!token) {
+      alert("❌ Authentication required. Please log in.");
+      return;
+    }
 
     try {
       const res = await fetch(
@@ -470,9 +528,9 @@ export const OutsideCatering = () => {
         alert(
           `✅ ${data.message}\n\n💰 This payment is added to today's collection!`
         );
-        await Promise.all([fetchCredits(), fetchDashboardStats()]);
+        await Promise.all([fetchCredits(token), fetchDashboardStats(token)]);
       } else {
-        throw new Error(data.error);
+        throw new Error(data.error || "Failed to collect credit");
       }
     } catch (error) {
       alert("❌ Failed to collect credit: " + error.message);
@@ -500,6 +558,7 @@ export const OutsideCatering = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 p-4 flex items-center justify-center">
         <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8 text-center max-w-md">
+          <AlertTriangle className="mx-auto mb-4 text-red-600" size={48} />
           <p className="text-red-600 font-medium mb-4">{error}</p>
           <button
             onClick={fetchData}
@@ -964,6 +1023,7 @@ export const OutsideCatering = () => {
                 {Object.entries(currentRound.items).map(
                   ([itemId, takenQty]) => {
                     const item = menuItems.find((i) => i._id === itemId);
+                    if (!item) return null;
                     const returnQty = currentRound.returns[itemId] || 0;
                     return (
                       <div
@@ -1396,10 +1456,25 @@ export const OutsideCatering = () => {
                         <div className="bg-white rounded-lg p-2">
                           <p className="text-gray-500">Commission</p>
                           <p className="font-bold text-green-600">
-                            {day.vendorCommission.toLocaleString()}
+                            {(day.netTotal * 0.19).toLocaleString()}
                           </p>
                         </div>
                       </div>
+                      {day.difference !== 0 && (
+                        <div className="mt-2 text-xs">
+                          <span className="text-gray-600">Difference: </span>
+                          <span
+                            className={`font-bold ${
+                              day.difference > 0
+                                ? "text-blue-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {day.difference > 0 ? "+" : ""}
+                            {day.difference.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1410,4 +1485,4 @@ export const OutsideCatering = () => {
       )}
     </div>
   );
-};
+}

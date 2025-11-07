@@ -15,6 +15,14 @@ const API_BASE_URL =
 // Helper function to get auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
+
+  if (!token) {
+    console.error("No token found in localStorage");
+    return null;
+  }
+
+  console.log("Token exists:", token.substring(0, 20) + "...");
+
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
@@ -25,32 +33,66 @@ const getAuthHeaders = () => {
 const apiService = {
   // Sales endpoints
   getSummary: async () => {
+    const headers = getAuthHeaders();
+    if (!headers) throw new Error("No authentication token");
+
     const response = await fetch(`${API_BASE_URL}/sales/summary`, {
       method: "GET",
-      headers: getAuthHeaders(),
+      headers,
     });
-    if (!response.ok) throw new Error("Failed to fetch summary");
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("AUTH_ERROR");
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Summary API Error:", errorText);
+      throw new Error(`Failed to fetch summary: ${response.status}`);
+    }
+
     return response.json();
   },
 
   getReport: async (date) => {
+    const headers = getAuthHeaders();
+    if (!headers) throw new Error("No authentication token");
+
     const response = await fetch(`${API_BASE_URL}/sales/report?date=${date}`, {
       method: "GET",
-      headers: getAuthHeaders(),
+      headers,
     });
-    if (!response.ok) throw new Error("Failed to fetch report");
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("AUTH_ERROR");
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Report API Error:", errorText);
+      throw new Error(`Failed to fetch report: ${response.status}`);
+    }
+
     return response.json();
   },
 
   createSale: async (saleData) => {
-    console.log("Sending to API:", JSON.stringify(saleData, null, 2));
+    const headers = getAuthHeaders();
+    if (!headers) throw new Error("No authentication token");
+
+    console.log("Creating sale with data:", JSON.stringify(saleData, null, 2));
+
     const response = await fetch(`${API_BASE_URL}/sales/create-sale`, {
       method: "POST",
-      headers: getAuthHeaders(),
+      headers,
       body: JSON.stringify(saleData),
     });
 
     console.log("API Response status:", response.status);
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("AUTH_ERROR");
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -67,16 +109,27 @@ const apiService = {
           `Failed to create sale (${response.status})`
       );
     }
+
     return response.json();
   },
 
-  // Credits endpoints - NOTE: These endpoints don't exist in your routes!
+  // Credits endpoints
   getCredits: async () => {
+    const headers = getAuthHeaders();
+    if (!headers) {
+      console.warn("No auth token, returning empty credits");
+      return { success: true, data: [] };
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}/credits`, {
         method: "GET",
-        headers: getAuthHeaders(),
+        headers,
       });
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("AUTH_ERROR");
+      }
 
       // Credits endpoint doesn't exist - return empty array
       if (response.status === 404) {
@@ -84,9 +137,16 @@ const apiService = {
         return { success: true, data: [] };
       }
 
-      if (!response.ok) throw new Error("Failed to fetch credits");
+      if (!response.ok) {
+        console.error("Credits fetch failed:", response.status);
+        return { success: true, data: [] };
+      }
+
       return response.json();
     } catch (error) {
+      if (error.message === "AUTH_ERROR") {
+        throw error;
+      }
       console.warn(
         "Error fetching credits, returning empty array:",
         error.message
@@ -96,21 +156,33 @@ const apiService = {
   },
 
   collectCredit: async (creditId, paymentData) => {
+    const headers = getAuthHeaders();
+    if (!headers) throw new Error("No authentication token");
+
     try {
       const response = await fetch(
         `${API_BASE_URL}/credits/${creditId}/collect`,
         {
           method: "POST",
-          headers: getAuthHeaders(),
+          headers,
           body: JSON.stringify(paymentData),
         }
       );
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("AUTH_ERROR");
+      }
 
       if (response.status === 404) {
         throw new Error("Credits collection endpoint not found");
       }
 
-      if (!response.ok) throw new Error("Failed to collect credit");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Collect credit error:", errorText);
+        throw new Error(`Failed to collect credit: ${response.status}`);
+      }
+
       return response.json();
     } catch (error) {
       console.error("Error collecting credit:", error);
@@ -153,7 +225,12 @@ const MainApp = () => {
       const token = localStorage.getItem("token");
       const user = localStorage.getItem("user");
 
+      console.log("Checking authentication...");
+      console.log("Token exists:", !!token);
+      console.log("User exists:", !!user);
+
       if (!token || !user) {
+        console.error("Missing authentication credentials");
         window.location.href = "/login";
         return false;
       }
@@ -165,10 +242,11 @@ const MainApp = () => {
           throw new Error("Invalid token format");
         }
 
-        console.log("User authenticated:", JSON.parse(user));
+        const userData = JSON.parse(user);
+        console.log("User authenticated:", userData.username, userData.role);
         return true;
       } catch (err) {
-        console.error("Auth error:", err);
+        console.error("Auth validation error:", err);
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         window.location.href = "/login";
@@ -182,7 +260,7 @@ const MainApp = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "reports") {
+    if (activeTab === "reports" && !loading) {
       fetchReport(selectedDate);
     }
   }, [selectedDate, activeTab]);
@@ -192,37 +270,79 @@ const MainApp = () => {
       setLoading(true);
       setError(null);
 
-      const [summaryResponse, creditsResponse] = await Promise.all([
-        apiService.getSummary(),
-        apiService.getCredits(), // This will return empty array if endpoint doesn't exist
-      ]);
+      console.log("Fetching all data...");
 
-      if (summaryResponse.success) {
-        setSummaryData(summaryResponse.data);
+      // Fetch summary first
+      let summaryResponse;
+      try {
+        summaryResponse = await apiService.getSummary();
+        console.log("Summary response:", summaryResponse);
+        if (summaryResponse.success) {
+          setSummaryData(summaryResponse.data);
+        }
+      } catch (err) {
+        if (err.message === "AUTH_ERROR") {
+          console.error("Authentication failed, redirecting to login");
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          window.location.href = "/login";
+          return;
+        }
+        console.error("Summary fetch failed:", err);
+        throw err;
       }
 
-      // Credits will always be set to empty array if endpoint doesn't exist
-      setCredits(creditsResponse.data || []);
-
-      // Fetch today's report for initial load
-      const reportResponse = await apiService.getReport(
-        new Date().toISOString().split("T")[0]
-      );
-      if (reportResponse.success) {
-        setReportData(reportResponse.data);
+      // Fetch credits (non-critical)
+      try {
+        const creditsResponse = await apiService.getCredits();
+        console.log("Credits response:", creditsResponse);
+        setCredits(creditsResponse.data || []);
+      } catch (err) {
+        if (err.message === "AUTH_ERROR") {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          window.location.href = "/login";
+          return;
+        }
+        console.warn("Credits fetch failed, continuing without credits:", err);
+        setCredits([]);
       }
+
+      // Fetch today's report
+      try {
+        const todayDate = new Date().toISOString().split("T")[0];
+        const reportResponse = await apiService.getReport(todayDate);
+        console.log("Report response:", reportResponse);
+        if (reportResponse.success) {
+          setReportData(reportResponse.data);
+        }
+      } catch (err) {
+        if (err.message === "AUTH_ERROR") {
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          window.location.href = "/login";
+          return;
+        }
+        console.warn("Report fetch failed:", err);
+      }
+
+      console.log("Data fetch completed successfully");
     } catch (err) {
       console.error("Error fetching data:", err);
 
       // Handle authentication errors
-      if (err.message.includes("401") || err.message.includes("403")) {
+      if (
+        err.message === "AUTH_ERROR" ||
+        err.message.includes("401") ||
+        err.message.includes("403")
+      ) {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         window.location.href = "/login";
         return;
       }
 
-      setError("Failed to connect to server");
+      setError("Failed to connect to server. Please check your connection.");
     } finally {
       setLoading(false);
     }
@@ -230,23 +350,39 @@ const MainApp = () => {
 
   const fetchReport = async (date) => {
     try {
+      console.log("Fetching report for date:", date);
       const response = await apiService.getReport(date);
       if (response.success) {
         setReportData(response.data);
+        console.log("Report data updated");
       }
     } catch (err) {
+      if (err.message === "AUTH_ERROR") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+        return;
+      }
       console.error("Error fetching report:", err);
     }
   };
 
   const handleCreateSale = async (saleData) => {
     try {
+      console.log("Creating sale:", saleData);
       const response = await apiService.createSale(saleData);
       if (response.success) {
+        console.log("Sale created successfully:", response.data);
         await fetchAllData();
         return response.data;
       }
     } catch (err) {
+      if (err.message === "AUTH_ERROR") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+        return;
+      }
       console.error("Error creating sale:", err);
       throw err;
     }
@@ -254,12 +390,20 @@ const MainApp = () => {
 
   const handleCollectCredit = async (creditId, paymentData) => {
     try {
+      console.log("Collecting credit:", creditId, paymentData);
       const response = await apiService.collectCredit(creditId, paymentData);
       if (response.success) {
+        console.log("Credit collected successfully:", response.data);
         await fetchAllData();
         return response.data;
       }
     } catch (err) {
+      if (err.message === "AUTH_ERROR") {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+        return;
+      }
       console.error("Error collecting credit:", err);
       throw err;
     }
@@ -341,7 +485,7 @@ const MainApp = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-semibold">Loading cafe data...</p>
+          <p className="text-gray-600 font-semibold">Loading...</p>
         </div>
       </div>
     );
@@ -384,21 +528,6 @@ const MainApp = () => {
       />
 
       <div className="flex-1 flex flex-col min-h-screen">
-        <header className="bg-white shadow-lg p-6 flex items-center justify-between lg:justify-end sticky top-0 z-30 border-b-4 border-indigo-200">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-3 hover:bg-indigo-50 rounded-xl transition-all"
-          >
-            <Menu size={28} className="text-indigo-700" />
-          </button>
-          <div className="text-right">
-            <p className="text-sm text-indigo-600 font-semibold">
-              Welcome back!
-            </p>
-            <p className="font-bold text-gray-900 text-xl">Cafe Manager</p>
-          </div>
-        </header>
-
         <main className="p-6 md:p-10 lg:p-12 max-w-[1800px] mx-auto w-full">
           {renderContent()}
         </main>
