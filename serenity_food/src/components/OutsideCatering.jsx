@@ -14,12 +14,54 @@ import {
   DollarSign,
   Calendar,
   Phone,
+  RefreshCw,
 } from "lucide-react";
 
-const API_BASE_URL =
-  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
+const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
 
-export default function OutsideCatering() {
+// Toast notification component
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColor = {
+    success: "bg-green-600",
+    error: "bg-red-600",
+    warning: "bg-orange-600",
+    info: "bg-blue-600",
+  }[type];
+
+  return (
+    <div
+      className={`${bgColor} text-white px-6 py-4 rounded-xl shadow-2xl flex items-start gap-3 min-w-[300px] max-w-md animate-slide-in`}
+    >
+      <div className="flex-1">
+        <p className="font-medium whitespace-pre-line">{message}</p>
+      </div>
+      <button onClick={onClose} className="text-white hover:text-gray-200">
+        <X size={18} />
+      </button>
+    </div>
+  );
+};
+
+const ToastContainer = ({ toasts, removeToast }) => (
+  <div className="fixed top-4 right-4 z-50 flex flex-col gap-3">
+    {toasts.map((toast) => (
+      <Toast
+        key={toast.id}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => removeToast(toast.id)}
+      />
+    ))}
+  </div>
+);
+
+export const OutsideCatering = () => {
+  const [toasts, setToasts] = useState([]);
   const [rounds, setRounds] = useState([]);
   const [currentRound, setCurrentRound] = useState({
     items: {},
@@ -42,36 +84,35 @@ export default function OutsideCatering() {
   const [categories, setCategories] = useState([]);
   const [credits, setCredits] = useState([]);
   const [dashboardStats, setDashboardStats] = useState(null);
-  const [historicalData, setHistoricalData] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [showHistory, setShowHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Get token helper function
-  const getToken = () => {
-    return localStorage.getItem("token") || "";
+  const showToast = (message, type = "info") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
   };
+
+  const removeToast = (id) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
+
+  const getToken = () => localStorage.getItem("token") || "";
 
   useEffect(() => {
     const token = getToken();
     if (!token) {
       setError("Authentication required. Please log in.");
+      showToast("❌ Please log in to continue", "error");
       setLoading(false);
       return;
     }
     fetchData();
-  }, [selectedDate]);
+  }, []);
 
   const fetchData = async () => {
     const token = getToken();
-    if (!token) {
-      setError("Authentication required. Please log in.");
-      setLoading(false);
-      return;
-    }
+    if (!token) return;
 
     setLoading(true);
     try {
@@ -80,14 +121,31 @@ export default function OutsideCatering() {
         fetchRounds(token),
         fetchDashboardStats(token),
         fetchCredits(token),
-        fetchHistoricalData(token),
       ]);
       setError("");
     } catch (err) {
       setError("Failed to fetch data");
+      showToast("❌ Failed to load data", "error");
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshData = async () => {
+    setRefreshing(true);
+    const token = getToken();
+    try {
+      await Promise.all([
+        fetchRounds(token),
+        fetchDashboardStats(token),
+        fetchCredits(token),
+      ]);
+      showToast("✅ Data refreshed", "success");
+    } catch (err) {
+      showToast("❌ Failed to refresh data", "error");
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -123,8 +181,9 @@ export default function OutsideCatering() {
 
   const fetchRounds = async (token) => {
     try {
+      const today = new Date().toISOString().split("T")[0];
       const res = await fetch(
-        `${API_BASE_URL}/outside-catering/rounds?date=${selectedDate}`,
+        `${API_BASE_URL}/outside-catering/rounds?date=${today}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -141,8 +200,9 @@ export default function OutsideCatering() {
 
   const fetchDashboardStats = async (token) => {
     try {
+      const today = new Date().toISOString().split("T")[0];
       const res = await fetch(
-        `${API_BASE_URL}/outside-catering/dashboard?date=${selectedDate}`,
+        `${API_BASE_URL}/outside-catering/dashboard?date=${today}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -168,27 +228,6 @@ export default function OutsideCatering() {
       }
     } catch (err) {
       console.error("Failed to fetch credits", err);
-      throw err;
-    }
-  };
-
-  const fetchHistoricalData = async (token) => {
-    try {
-      const endDate = new Date().toISOString().split("T")[0];
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
-      const startDateStr = startDate.toISOString().split("T")[0];
-
-      const res = await fetch(
-        `${API_BASE_URL}/outside-catering/summaries?startDate=${startDateStr}&endDate=${endDate}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const data = await res.json();
-      if (data.success) {
-        setHistoricalData(data.data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch historical data", err);
       throw err;
     }
   };
@@ -224,6 +263,8 @@ export default function OutsideCatering() {
         ...currentRound,
         returns: { ...currentRound.returns, [itemId]: qty },
       });
+    } else {
+      showToast(`❌ Cannot return more than ${takenQty} items`, "error");
     }
   };
 
@@ -248,41 +289,43 @@ export default function OutsideCatering() {
 
   const startRound = () => {
     if (Object.keys(currentRound.items).length === 0) {
-      alert("Add items before starting the round!");
+      showToast("❌ Add items before starting the round!", "error");
       return;
     }
     setCurrentRound({ ...currentRound, started: true, startTime: new Date() });
-    alert(
+    showToast(
       `✅ Round ${
         rounds.length + 1
-      } started! Expected: KSh ${currentRoundExpected.toLocaleString()}`
+      } started!\n💰 Expected: KSh ${currentRoundExpected.toLocaleString()}`,
+      "success"
     );
   };
 
   const completeRound = async () => {
     if (!currentRound.started) {
-      alert("Start the round first!");
+      showToast("❌ Start the round first!", "error");
       return;
     }
 
     const token = getToken();
     if (!token) {
-      alert("❌ Authentication required. Please log in.");
+      showToast("❌ Authentication required", "error");
       return;
     }
 
     try {
+      if (!menuItems || menuItems.length === 0) {
+        throw new Error("Menu items not loaded");
+      }
+
       const roundData = {
         roundNumber: rounds.length + 1,
         items: Object.entries(currentRound.items)
           .map(([itemId, qty]) => {
             const item = menuItems.find((i) => i._id === itemId);
-            if (!item) {
-              console.error(`Item not found: ${itemId}`);
-              return null;
-            }
+            if (!item) return null;
             return {
-              menuItem: item._id,
+              menuItem: itemId,
               name: item.name,
               icon: item.icon || "",
               price: item.price,
@@ -294,12 +337,9 @@ export default function OutsideCatering() {
         returns: Object.entries(currentRound.returns)
           .map(([itemId, qty]) => {
             const item = menuItems.find((i) => i._id === itemId);
-            if (!item) {
-              console.error(`Item not found: ${itemId}`);
-              return null;
-            }
+            if (!item) return null;
             return {
-              menuItem: item._id,
+              menuItem: itemId,
               name: item.name,
               icon: item.icon || "",
               price: item.price,
@@ -327,7 +367,10 @@ export default function OutsideCatering() {
       const data = await res.json();
 
       if (data.success) {
+        // Refresh data
         await Promise.all([fetchRounds(token), fetchDashboardStats(token)]);
+
+        // Reset current round
         setCurrentRound({
           items: {},
           returns: {},
@@ -335,131 +378,32 @@ export default function OutsideCatering() {
           startTime: null,
         });
         setShowReturnsModal(false);
-        alert(
-          `✅ ${
-            data.message
-          }\n💰 Your Commission: KSh ${currentCommission.toLocaleString()}`
+
+        // Show success toast
+        showToast(
+          `✅ Round ${
+            roundData.roundNumber
+          } completed!\n💰 Net Sales: KSh ${currentRoundNet.toLocaleString()}\n🎉 Your Commission: KSh ${currentCommission.toLocaleString()}`,
+          "success"
         );
       } else {
         throw new Error(data.error || "Failed to record round");
       }
     } catch (error) {
-      alert("❌ Failed to record round: " + error.message);
-    }
-  };
-
-  // Calculate totals using dashboard stats if available, otherwise calculate from rounds
-  const totalExpected =
-    dashboardStats?.rounds?.netTotal ||
-    rounds.reduce((sum, r) => sum + r.netTotal, 0);
-
-  const todayCreditsGiven = credits.filter(
-    (c) => c.date === selectedDate && !c.isPaid
-  );
-  const creditAmount =
-    dashboardStats?.credits?.givenAmount ||
-    todayCreditsGiven.reduce((sum, c) => sum + c.amount, 0);
-
-  const creditsCollectedToday = credits.filter(
-    (c) => c.paidDate === selectedDate
-  );
-  const creditsCollectedAmount =
-    dashboardStats?.credits?.collectedAmount ||
-    creditsCollectedToday.reduce((sum, c) => sum + c.paidAmount, 0);
-
-  const adjustedExpected =
-    dashboardStats?.financial?.netTotal ||
-    totalExpected - creditAmount + creditsCollectedAmount;
-  const totalCommission =
-    dashboardStats?.financial?.vendorCommission || adjustedExpected * 0.19;
-
-  const totalCollected = settlement.cash + settlement.mpesa;
-  const difference = totalCollected - adjustedExpected;
-
-  const handleGrandCalculation = async () => {
-    if (rounds.length === 0) {
-      alert("No rounds to calculate!");
-      return;
-    }
-
-    if (totalCollected <= 0) {
-      alert("Enter cash and/or M-Pesa amounts!");
-      return;
-    }
-
-    const token = getToken();
-    if (!token) {
-      alert("❌ Authentication required. Please log in.");
-      return;
-    }
-
-    try {
-      const summaryData = {
-        totalRounds: rounds.length,
-        rounds: rounds.map((r) => r._id),
-        totalExpected: rounds.reduce((sum, r) => sum + r.expectedAmount, 0),
-        totalReturns: rounds.reduce((sum, r) => sum + r.returnsAmount, 0),
-        creditsGiven: creditAmount,
-        creditsCollected: creditsCollectedAmount,
-        netTotal: adjustedExpected,
-        cashCollected: settlement.cash,
-        mpesaCollected: settlement.mpesa,
-        totalCollected,
-        difference,
-        reconciliationNotes:
-          difference !== 0
-            ? `Difference: ${difference > 0 ? "+" : ""}KSh ${difference}`
-            : "Perfect balance",
-      };
-
-      const res = await fetch(`${API_BASE_URL}/outside-catering/day-summary`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(summaryData),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        alert(
-          `✅ ${
-            data.message
-          }\n\n📊 Summary:\nTotal Sales: KSh ${adjustedExpected.toLocaleString()}\n💰 Your Commission (19%): KSh ${totalCommission.toLocaleString()}\n${
-            difference !== 0
-              ? `\n⚠️ Difference: ${
-                  difference > 0 ? "+" : ""
-                }KSh ${difference.toLocaleString()}`
-              : ""
-          }`
-        );
-        await Promise.all([
-          fetchRounds(token),
-          fetchDashboardStats(token),
-          fetchHistoricalData(token),
-        ]);
-        setRounds([]);
-        setSettlement({ cash: 0, mpesa: 0 });
-        setShowGrandCalc(false);
-      } else {
-        throw new Error(data.error || "Failed to record summary");
-      }
-    } catch (error) {
-      alert("❌ Failed to record: " + error.message);
+      console.error("Complete round error:", error);
+      showToast("❌ Failed to record round: " + error.message, "error");
     }
   };
 
   const handleAddCredit = async () => {
     if (!creditForm.name.trim() || creditForm.amount <= 0) {
-      alert("Please enter customer name and amount!");
+      showToast("❌ Enter customer name and amount!", "error");
       return;
     }
 
     const token = getToken();
     if (!token) {
-      alert("❌ Authentication required. Please log in.");
+      showToast("❌ Authentication required", "error");
       return;
     }
 
@@ -481,8 +425,11 @@ export default function OutsideCatering() {
       const data = await res.json();
 
       if (data.success) {
-        alert(
-          `✅ ${data.message}\n\n⚠️ This amount will be deducted from today's total.\n📱 Customer will be reminded tomorrow.`
+        showToast(
+          `✅ Credit of KSh ${creditForm.amount.toLocaleString()} recorded for ${
+            creditForm.name
+          }\n⚠️ Due tomorrow - will be deducted from today's total`,
+          "success"
         );
         setCreditForm({ name: "", phone: "", amount: 0, notes: "" });
         setShowCreditModal(false);
@@ -491,7 +438,7 @@ export default function OutsideCatering() {
         throw new Error(data.error || "Failed to record credit");
       }
     } catch (error) {
-      alert("❌ Failed to record credit: " + error.message);
+      showToast("❌ Failed to record credit: " + error.message, "error");
     }
   };
 
@@ -502,7 +449,7 @@ export default function OutsideCatering() {
 
     const token = getToken();
     if (!token) {
-      alert("❌ Authentication required. Please log in.");
+      showToast("❌ Authentication required", "error");
       return;
     }
 
@@ -525,17 +472,105 @@ export default function OutsideCatering() {
       const data = await res.json();
 
       if (data.success) {
-        alert(
-          `✅ ${data.message}\n\n💰 This payment is added to today's collection!`
+        showToast(
+          `✅ Payment of KSh ${creditAmount.toLocaleString()} collected from ${customerName}\n💰 Added to today's collection!`,
+          "success"
         );
         await Promise.all([fetchCredits(token), fetchDashboardStats(token)]);
       } else {
         throw new Error(data.error || "Failed to collect credit");
       }
     } catch (error) {
-      alert("❌ Failed to collect credit: " + error.message);
+      showToast("❌ Failed to collect credit: " + error.message, "error");
     }
   };
+
+  const handleGrandCalculation = async () => {
+    if (rounds.length === 0) {
+      showToast("❌ No rounds to calculate!", "error");
+      return;
+    }
+
+    if (totalCollected <= 0) {
+      showToast("❌ Enter cash and/or M-Pesa amounts!", "error");
+      return;
+    }
+
+    const token = getToken();
+    if (!token) {
+      showToast("❌ Authentication required", "error");
+      return;
+    }
+
+    try {
+      const summaryData = {
+        totalRounds: rounds.length,
+        rounds: rounds.map((r) => r._id),
+        totalExpected: rounds.reduce((sum, r) => sum + r.expectedAmount, 0),
+        totalReturns: rounds.reduce((sum, r) => sum + r.returnsAmount, 0),
+        creditsGiven: dashboardStats?.credits?.givenAmount || 0,
+        creditsCollected: dashboardStats?.credits?.collectedAmount || 0,
+        netTotal: dashboardStats?.financial?.netTotal || 0,
+        cashCollected: settlement.cash,
+        mpesaCollected: settlement.mpesa,
+        totalCollected,
+        difference,
+        reconciliationNotes:
+          difference !== 0
+            ? `Difference: ${difference > 0 ? "+" : ""}KSh ${difference}`
+            : "Perfect balance",
+      };
+
+      const res = await fetch(`${API_BASE_URL}/outside-catering/day-summary`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(summaryData),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        const totalCommission =
+          (dashboardStats?.financial?.netTotal || 0) * 0.19;
+        showToast(
+          `✅ Day completed successfully!\n📊 Total Sales: KSh ${(
+            dashboardStats?.financial?.netTotal || 0
+          ).toLocaleString()}\n💰 Your Commission (19%): KSh ${totalCommission.toLocaleString()}${
+            difference !== 0
+              ? `\n⚠️ Difference: ${
+                  difference > 0 ? "+" : ""
+                }KSh ${difference.toLocaleString()}`
+              : ""
+          }`,
+          "success"
+        );
+
+        // Reset everything
+        setRounds([]);
+        setSettlement({ cash: 0, mpesa: 0 });
+        setShowGrandCalc(false);
+
+        // Refresh data
+        await fetchData();
+      } else {
+        throw new Error(data.error || "Failed to record summary");
+      }
+    } catch (error) {
+      showToast("❌ Failed to complete day: " + error.message, "error");
+    }
+  };
+
+  // Calculate totals
+  const totalExpected = dashboardStats?.rounds?.netTotal || 0;
+  const creditAmount = dashboardStats?.credits?.givenAmount || 0;
+  const creditsCollectedAmount = dashboardStats?.credits?.collectedAmount || 0;
+  const adjustedExpected = dashboardStats?.financial?.netTotal || 0;
+  const totalCommission = dashboardStats?.financial?.vendorCommission || 0;
+  const totalCollected = settlement.cash + settlement.mpesa;
+  const difference = totalCollected - adjustedExpected;
 
   const outstandingCredits = credits.filter((c) => !c.isPaid);
   const overdueCredits = outstandingCredits.filter(
@@ -554,7 +589,7 @@ export default function OutsideCatering() {
     );
   }
 
-  if (error) {
+  if (error && !menuItems.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 p-4 flex items-center justify-center">
         <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8 text-center max-w-md">
@@ -573,6 +608,8 @@ export default function OutsideCatering() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 p-4 pb-32">
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
       {/* Critical Alerts */}
       {criticalCredits.length > 0 && (
         <div className="mb-4 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-2xl p-6 shadow-2xl animate-pulse">
@@ -622,16 +659,20 @@ export default function OutsideCatering() {
                 Outside Catering
               </h2>
               <p className="text-red-100">
-                Track rounds, manage credits & earn your 19% commission
+                Track rounds & earn your 19% commission
               </p>
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowHistory(true)}
-                className="bg-white text-red-600 px-4 py-2 rounded-xl font-bold hover:scale-105 transition-all flex items-center gap-2"
+                onClick={refreshData}
+                disabled={refreshing}
+                className="bg-white text-red-600 px-4 py-2 rounded-xl font-bold hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50"
               >
-                <Calendar size={18} />
-                History
+                <RefreshCw
+                  size={18}
+                  className={refreshing ? "animate-spin" : ""}
+                />
+                Refresh
               </button>
               {rounds.length > 0 && (
                 <button
@@ -650,16 +691,13 @@ export default function OutsideCatering() {
             <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-white">
               <p className="text-xs font-bold opacity-80">ROUNDS TODAY</p>
               <p className="text-3xl font-bold">
-                {dashboardStats?.rounds?.total || rounds.length}
+                {dashboardStats?.rounds?.total || 0}
               </p>
             </div>
             <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-white">
-              <p className="text-xs font-bold opacity-80">TOTAL SALES</p>
+              <p className="text-xs font-bold opacity-80">NET SALES</p>
               <p className="text-xl font-bold">
-                KSh{" "}
-                {(
-                  dashboardStats?.rounds?.netTotal || totalExpected
-                ).toLocaleString()}
+                KSh {adjustedExpected.toLocaleString()}
               </p>
             </div>
             <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-white">
@@ -671,15 +709,14 @@ export default function OutsideCatering() {
             <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-white">
               <p className="text-xs font-bold opacity-80">CREDITS OUT</p>
               <p className="text-xl font-bold text-yellow-300">
-                {dashboardStats?.credits?.outstanding ||
-                  outstandingCredits.length}
+                {dashboardStats?.credits?.outstanding || 0}
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Credits Warning Section */}
+      {/* Outstanding Credits */}
       {outstandingCredits.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg p-4 mb-4">
           <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
@@ -740,11 +777,6 @@ export default function OutsideCatering() {
                 )}
               </div>
             ))}
-            {outstandingCredits.length > 3 && (
-              <button className="w-full text-center text-sm text-gray-600 hover:text-gray-900 font-medium py-2">
-                View all {outstandingCredits.length} credits →
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -959,7 +991,7 @@ export default function OutsideCatering() {
                   <div className="bg-white rounded-lg p-2">
                     <p className="text-gray-500">Commission</p>
                     <p className="font-bold text-orange-600">
-                      KSh {(round.netTotal * 0.19).toLocaleString()}
+                      KSh {round.vendorCommission.toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -1023,24 +1055,21 @@ export default function OutsideCatering() {
                 {Object.entries(currentRound.items).map(
                   ([itemId, takenQty]) => {
                     const item = menuItems.find((i) => i._id === itemId);
-                    if (!item) return null;
                     const returnQty = currentRound.returns[itemId] || 0;
+                    if (!item) return null;
+
                     return (
                       <div
                         key={itemId}
-                        className={`bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl shadow-md p-4 border-2 ${
-                          returnQty > 0
-                            ? "border-red-400 bg-red-50"
-                            : "border-gray-200"
-                        }`}
+                        className="bg-white rounded-xl shadow-md p-4 border-2 border-gray-200"
                       >
                         <div className="text-5xl mb-2 text-center">
                           {item.icon || "🍽️"}
                         </div>
-                        <h4 className="font-bold text-center text-sm mb-2 min-h-[2.5rem] flex items-center justify-center">
+                        <h4 className="font-bold text-sm text-gray-900 text-center mb-2">
                           {item.name}
                         </h4>
-                        <p className="text-center text-xs text-gray-600 mb-3">
+                        <p className="text-xs text-gray-600 text-center mb-3">
                           Took: {takenQty}
                         </p>
                         <input
@@ -1054,29 +1083,12 @@ export default function OutsideCatering() {
                               parseInt(e.target.value) || 0
                             )
                           }
-                          placeholder="Returns"
-                          className="w-full h-12 text-center border-2 border-gray-300 rounded-xl font-bold text-lg focus:border-red-500 focus:ring-4 focus:ring-red-200 focus:outline-none"
+                          placeholder="0"
+                          className="w-full h-12 text-center border-2 border-gray-300 rounded-lg font-bold text-xl focus:border-red-500 focus:ring-2 focus:ring-red-200 focus:outline-none"
                         />
-                        <div className="grid grid-cols-2 gap-2 mt-2">
-                          <button
-                            onClick={() =>
-                              updateReturnQuantity(
-                                itemId,
-                                Math.min(returnQty + 1, takenQty)
-                              )
-                            }
-                            className="py-1 rounded-lg bg-red-500 text-white font-bold text-xs hover:bg-red-600"
-                          >
-                            +1
-                          </button>
-                          <button
-                            onClick={() => updateReturnQuantity(itemId, 0)}
-                            disabled={returnQty === 0}
-                            className="py-1 rounded-lg bg-gray-400 text-white font-bold text-xs hover:bg-gray-500 disabled:opacity-30"
-                          >
-                            Clear
-                          </button>
-                        </div>
+                        <p className="text-xs text-center text-gray-500 mt-2">
+                          Sold: {takenQty - returnQty}
+                        </p>
                       </div>
                     );
                   }
@@ -1085,10 +1097,9 @@ export default function OutsideCatering() {
 
               <button
                 onClick={completeRound}
-                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all"
               >
-                <CheckCircle size={24} />
-                Complete Round {rounds.length + 1}
+                ✅ Complete Round & Record Sales
               </button>
             </div>
           </div>
@@ -1101,11 +1112,9 @@ export default function OutsideCatering() {
           <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-gradient-to-r from-red-600 to-orange-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-bold">
-                  End of Day Reconciliation
-                </h3>
+                <h3 className="text-2xl font-bold">End of Day Calculation</h3>
                 <p className="text-red-100 text-sm">
-                  Record cash & M-Pesa collections
+                  Final reconciliation for today
                 </p>
               </div>
               <button
@@ -1117,158 +1126,144 @@ export default function OutsideCatering() {
             </div>
 
             <div className="p-6">
+              {/* Summary Stats */}
               <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-4 mb-6 border-2 border-blue-200">
-                <h4 className="font-bold text-lg mb-3 text-gray-900">
-                  Today's Summary
-                </h4>
+                <h4 className="font-bold text-lg mb-3">Today's Summary</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total Rounds:</span>
+                    <span>Total Rounds:</span>
                     <span className="font-bold">{rounds.length}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Gross Sales:</span>
-                    <span className="font-bold text-blue-600">
-                      KSh{" "}
-                      {rounds
-                        .reduce((sum, r) => sum + r.expectedAmount, 0)
-                        .toLocaleString()}
+                    <span>Gross Sales:</span>
+                    <span className="font-bold">
+                      KSh {totalExpected.toLocaleString()}
                     </span>
                   </div>
-                  {creditAmount > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">
-                        Credits Given Today:
-                      </span>
-                      <span className="font-bold text-red-600">
-                        -KSh {creditAmount.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  {creditsCollectedAmount > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">
-                        Credits Collected Today:
-                      </span>
-                      <span className="font-bold text-green-600">
-                        +KSh {creditsCollectedAmount.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  <div className="border-t-2 border-blue-200 pt-2 flex justify-between">
-                    <span className="font-bold text-gray-900">
-                      Net Total Expected:
+                  <div className="flex justify-between text-red-600">
+                    <span>Credits Given:</span>
+                    <span className="font-bold">
+                      -KSh {creditAmount.toLocaleString()}
                     </span>
-                    <span className="text-2xl font-bold text-green-600">
+                  </div>
+                  <div className="flex justify-between text-green-600">
+                    <span>Credits Collected:</span>
+                    <span className="font-bold">
+                      +KSh {creditsCollectedAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="border-t-2 border-blue-200 pt-2 flex justify-between text-lg">
+                    <span className="font-bold">Net Total:</span>
+                    <span className="font-bold text-blue-600">
                       KSh {adjustedExpected.toLocaleString()}
                     </span>
                   </div>
-                  <div className="flex justify-between bg-orange-100 rounded-lg p-2 mt-2">
-                    <span className="font-bold text-orange-700">
-                      Your Commission (19%):
-                    </span>
-                    <span className="text-xl font-bold text-orange-600">
+                  <div className="flex justify-between text-orange-600">
+                    <span className="font-bold">Your Commission (19%):</span>
+                    <span className="font-bold text-xl">
                       KSh {totalCommission.toLocaleString()}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                    <DollarSign size={18} />
-                    Cash Collected (KSh)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={settlement.cash || ""}
-                    onChange={(e) =>
-                      setSettlement({
-                        ...settlement,
-                        cash: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full h-14 px-4 border-3 border-gray-300 rounded-xl font-bold text-2xl focus:border-green-500 focus:ring-4 focus:ring-green-200 focus:outline-none"
-                    placeholder="0"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                    <Phone size={18} />
-                    M-Pesa Collected (KSh)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={settlement.mpesa || ""}
-                    onChange={(e) =>
-                      setSettlement({
-                        ...settlement,
-                        mpesa: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full h-14 px-4 border-3 border-gray-300 rounded-xl font-bold text-2xl focus:border-green-500 focus:ring-4 focus:ring-green-200 focus:outline-none"
-                    placeholder="0"
-                  />
+              {/* Payment Collection */}
+              <div className="mb-6">
+                <h4 className="font-bold text-lg mb-3">Payment Collection</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      💵 Cash Collected
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={settlement.cash || ""}
+                      onChange={(e) =>
+                        setSettlement({
+                          ...settlement,
+                          cash: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      placeholder="Enter cash amount"
+                      className="w-full h-14 px-4 border-2 border-gray-300 rounded-xl font-bold text-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      📱 M-Pesa Collected
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={settlement.mpesa || ""}
+                      onChange={(e) =>
+                        setSettlement({
+                          ...settlement,
+                          mpesa: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      placeholder="Enter M-Pesa amount"
+                      className="w-full h-14 px-4 border-2 border-gray-300 rounded-xl font-bold text-xl focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {totalCollected > 0 && (
-                <div
-                  className={`rounded-xl p-4 mb-6 border-2 ${
-                    difference === 0
-                      ? "bg-green-50 border-green-300"
-                      : difference > 0
-                      ? "bg-blue-50 border-blue-300"
-                      : "bg-red-50 border-red-300"
-                  }`}
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold text-gray-700">
-                      Total Collected:
-                    </span>
-                    <span className="text-2xl font-bold text-gray-900">
-                      KSh {totalCollected.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-gray-700">Difference:</span>
-                    <span
-                      className={`text-2xl font-bold ${
-                        difference === 0
-                          ? "text-green-600"
-                          : difference > 0
-                          ? "text-blue-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {difference === 0
-                        ? "✓ Perfect"
-                        : `${
-                            difference > 0 ? "+" : ""
-                          }KSh ${difference.toLocaleString()}`}
-                    </span>
-                  </div>
-                  {difference !== 0 && (
-                    <p className="text-xs text-gray-600 mt-2">
-                      {difference > 0
-                        ? "You collected more than expected"
-                        : "You collected less than expected"}
-                    </p>
-                  )}
+              {/* Reconciliation */}
+              <div
+                className={`rounded-xl p-4 mb-6 border-2 ${
+                  difference === 0
+                    ? "bg-green-50 border-green-200"
+                    : difference > 0
+                    ? "bg-blue-50 border-blue-200"
+                    : "bg-red-50 border-red-200"
+                }`}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold">Total Collected:</span>
+                  <span className="text-2xl font-bold">
+                    KSh {totalCollected.toLocaleString()}
+                  </span>
                 </div>
-              )}
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold">Expected:</span>
+                  <span className="text-xl font-bold">
+                    KSh {adjustedExpected.toLocaleString()}
+                  </span>
+                </div>
+                <div className="border-t-2 pt-2 flex justify-between items-center">
+                  <span className="font-bold">Difference:</span>
+                  <span
+                    className={`text-2xl font-bold ${
+                      difference === 0
+                        ? "text-green-600"
+                        : difference > 0
+                        ? "text-blue-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {difference > 0 ? "+" : ""}KSh {difference.toLocaleString()}
+                  </span>
+                </div>
+                {difference === 0 && (
+                  <p className="text-sm text-green-600 font-bold text-center mt-2">
+                    ✅ Perfect Balance!
+                  </p>
+                )}
+                {difference !== 0 && (
+                  <p className="text-sm text-gray-600 text-center mt-2">
+                    {difference > 0 ? "⚠️ Excess collection" : "⚠️ Shortage"}
+                  </p>
+                )}
+              </div>
 
               <button
                 onClick={handleGrandCalculation}
                 disabled={totalCollected <= 0}
-                className="w-full bg-gradient-to-r from-red-600 to-orange-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-red-600 to-orange-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Calculator size={24} />
-                Complete Day & Calculate Commission
+                🎯 Complete Day & Submit
               </button>
             </div>
           </div>
@@ -1278,11 +1273,13 @@ export default function OutsideCatering() {
       {/* Credit Modal */}
       {showCreditModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full">
-            <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full">
+            <div className="sticky top-0 bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
               <div>
                 <h3 className="text-2xl font-bold">Give Credit</h3>
-                <p className="text-orange-100 text-sm">Record customer debt</p>
+                <p className="text-orange-100 text-sm">
+                  Record customer credit
+                </p>
               </div>
               <button
                 onClick={() => setShowCreditModal(false)}
@@ -1293,13 +1290,6 @@ export default function OutsideCatering() {
             </div>
 
             <div className="p-6">
-              <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-4 mb-6">
-                <p className="text-sm text-yellow-800 font-medium">
-                  ⚠️ This amount will be deducted from today's expected total.
-                  Customer will be reminded tomorrow.
-                </p>
-              </div>
-
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
@@ -1311,11 +1301,10 @@ export default function OutsideCatering() {
                     onChange={(e) =>
                       setCreditForm({ ...creditForm, name: e.target.value })
                     }
-                    className="w-full h-12 px-4 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-200 focus:outline-none"
                     placeholder="Enter customer name"
+                    className="w-full h-12 px-4 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Phone Number (Optional)
@@ -1326,11 +1315,10 @@ export default function OutsideCatering() {
                     onChange={(e) =>
                       setCreditForm({ ...creditForm, phone: e.target.value })
                     }
-                    className="w-full h-12 px-4 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-200 focus:outline-none"
-                    placeholder="0712345678"
+                    placeholder="07XXXXXXXX"
+                    className="w-full h-12 px-4 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Amount (KSh) *
@@ -1345,11 +1333,10 @@ export default function OutsideCatering() {
                         amount: parseFloat(e.target.value) || 0,
                       })
                     }
-                    className="w-full h-14 px-4 border-3 border-gray-300 rounded-xl font-bold text-2xl focus:border-orange-500 focus:ring-4 focus:ring-orange-200 focus:outline-none"
-                    placeholder="0"
+                    placeholder="Enter amount"
+                    className="w-full h-12 px-4 border-2 border-gray-300 rounded-xl font-bold text-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     Notes (Optional)
@@ -1359,130 +1346,47 @@ export default function OutsideCatering() {
                     onChange={(e) =>
                       setCreditForm({ ...creditForm, notes: e.target.value })
                     }
-                    className="w-full h-24 px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:ring-4 focus:ring-orange-200 focus:outline-none resize-none"
                     placeholder="Any additional notes..."
+                    rows="3"
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-200 focus:outline-none resize-none"
                   />
                 </div>
+              </div>
+
+              <div className="mt-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-3">
+                <p className="text-sm text-yellow-800">
+                  ⚠️ <strong>Important:</strong> Due tomorrow. If unpaid for 5+
+                  days, it will be deducted from your income.
+                </p>
               </div>
 
               <button
                 onClick={handleAddCredit}
                 disabled={!creditForm.name.trim() || creditForm.amount <= 0}
-                className="w-full mt-6 bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full mt-4 bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-4 rounded-xl font-bold text-lg hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <UserPlus size={24} />
-                Record Credit
+                💳 Record Credit
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* History Modal */}
-      {showHistory && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-red-600 to-orange-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
-              <div>
-                <h3 className="text-2xl font-bold">Sales History</h3>
-                <p className="text-red-100 text-sm">Last 30 days performance</p>
-              </div>
-              <button
-                onClick={() => setShowHistory(false)}
-                className="text-white hover:bg-white/20 p-2 rounded-xl transition-all"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="p-6">
-              {historicalData.length === 0 ? (
-                <div className="text-center py-12">
-                  <TrendingUp
-                    size={64}
-                    className="mx-auto text-gray-300 mb-4"
-                  />
-                  <p className="text-gray-500">No historical data yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {historicalData.map((day) => (
-                    <div
-                      key={day._id}
-                      className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-4 border-2 border-gray-200"
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <p className="font-bold text-lg text-gray-900">
-                            {new Date(day.date).toLocaleDateString("en-US", {
-                              weekday: "long",
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            })}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {day.totalRounds} rounds completed
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-600">Net Sales</p>
-                          <p className="text-2xl font-bold text-green-600">
-                            KSh {day.netTotal.toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 gap-2 text-xs">
-                        <div className="bg-white rounded-lg p-2">
-                          <p className="text-gray-500">Gross</p>
-                          <p className="font-bold text-blue-600">
-                            KSh {day.totalExpected.toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="bg-white rounded-lg p-2">
-                          <p className="text-gray-500">Returns</p>
-                          <p className="font-bold text-red-600">
-                            -{day.totalReturns.toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="bg-white rounded-lg p-2">
-                          <p className="text-gray-500">Credits</p>
-                          <p className="font-bold text-orange-600">
-                            {day.creditsGiven > 0
-                              ? `-${day.creditsGiven.toLocaleString()}`
-                              : "0"}
-                          </p>
-                        </div>
-                        <div className="bg-white rounded-lg p-2">
-                          <p className="text-gray-500">Commission</p>
-                          <p className="font-bold text-green-600">
-                            {(day.netTotal * 0.19).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                      {day.difference !== 0 && (
-                        <div className="mt-2 text-xs">
-                          <span className="text-gray-600">Difference: </span>
-                          <span
-                            className={`font-bold ${
-                              day.difference > 0
-                                ? "text-blue-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {day.difference > 0 ? "+" : ""}
-                            {day.difference.toLocaleString()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <style jsx>{`
+        @keyframes slide-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
-}
+};

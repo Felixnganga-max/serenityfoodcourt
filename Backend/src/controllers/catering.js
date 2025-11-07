@@ -171,7 +171,8 @@ exports.getRounds = async (req, res) => {
  */
 exports.createDaySummary = async (req, res) => {
   try {
-    const vendorId = req.user.id;
+    const vendorId = req.user.id || req.user._id;
+
     const {
       totalRounds,
       rounds,

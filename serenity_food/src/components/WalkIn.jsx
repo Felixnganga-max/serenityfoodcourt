@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Minus, Plus, Trash2, ShoppingBag, X } from "lucide-react";
 import { PaymentModal } from "./PaymentModal";
+import { toast } from "react-toastify";
 
-const API_BASE_URL =
-  "  https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
+const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
 
 export const WalkIn = ({ onCreateSale }) => {
   const [cart, setCart] = useState({});
@@ -47,11 +47,14 @@ export const WalkIn = ({ onCreateSale }) => {
           ...activeCategories,
         ]);
         setMenuItems(menuItemsData.data.filter((item) => item.isActive));
+        toast.success("Menu loaded successfully!");
       } else {
         setError("Failed to load data");
+        toast.error("Failed to load data");
       }
     } catch (err) {
       setError("Failed to fetch menu data");
+      toast.error("Failed to fetch menu data");
       console.error(err);
     } finally {
       setLoading(false);
@@ -85,6 +88,8 @@ export const WalkIn = ({ onCreateSale }) => {
 
   const handlePaymentComplete = async (paymentDetails) => {
     setProcessing(true);
+    const loadingToast = toast.loading("Processing sale...");
+
     try {
       const isSplit =
         paymentDetails.mpesaAmount > 0 && paymentDetails.cashAmount > 0;
@@ -120,10 +125,20 @@ export const WalkIn = ({ onCreateSale }) => {
       setShowPaymentModal(false);
       setShowCart(false);
 
-      alert("Sale recorded successfully! 🎉");
+      toast.update(loadingToast, {
+        render: "Sale recorded successfully! 🎉",
+        type: "success",
+        isLoading: false,
+        autoClose: 3000,
+      });
     } catch (error) {
       console.error("Sale error:", error);
-      alert(`Failed to record sale: ${error.message}`);
+      toast.update(loadingToast, {
+        render: `Failed to record sale: ${error.message}`,
+        type: "error",
+        isLoading: false,
+        autoClose: 5000,
+      });
     } finally {
       setProcessing(false);
     }
@@ -240,7 +255,10 @@ export const WalkIn = ({ onCreateSale }) => {
                 </div>
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setCart({})}
+                    onClick={() => {
+                      setCart({});
+                      toast.info("Cart cleared");
+                    }}
                     className="px-6 py-4 rounded-xl border-2 border-red-300 text-red-600 font-bold hover:bg-red-50 transition-colors"
                   >
                     Clear Cart
@@ -328,6 +346,7 @@ export const WalkIn = ({ onCreateSale }) => {
               <div className="w-full">
                 <input
                   type="number"
+                  inputMode="numeric"
                   min="0"
                   value={quantity === 0 ? "" : quantity}
                   onChange={(e) => {
@@ -344,27 +363,30 @@ export const WalkIn = ({ onCreateSale }) => {
                     }
                   }}
                   placeholder="0"
-                  className="w-full h-14 text-center border-3 border-gray-300 rounded-xl font-bold text-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-200 focus:outline-none transition-all"
+                  className="w-full h-14 text-center border-3 border-gray-300 rounded-xl font-bold text-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-200 focus:outline-none transition-all touch-manipulation"
                 />
 
                 {/* Quick add buttons */}
                 <div className="grid grid-cols-3 gap-2 mt-3">
                   <button
+                    type="button"
                     onClick={() => updateQuantity(item._id, quantity + 1)}
-                    className="py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105"
+                    className="py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105 touch-manipulation"
                   >
                     +1
                   </button>
                   <button
+                    type="button"
                     onClick={() => updateQuantity(item._id, quantity + 5)}
-                    className="py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105"
+                    className="py-2 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105 touch-manipulation"
                   >
                     +5
                   </button>
                   <button
+                    type="button"
                     onClick={() => updateQuantity(item._id, 0)}
                     disabled={quantity === 0}
-                    className="py-2 rounded-lg bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="py-2 rounded-lg bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold text-sm hover:shadow-lg transition-all hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation"
                   >
                     Clear
                   </button>
@@ -397,8 +419,9 @@ export const WalkIn = ({ onCreateSale }) => {
       {/* Floating Cart Button */}
       {cartItems.length > 0 && (
         <button
+          type="button"
           onClick={() => setShowCart(true)}
-          className="fixed bottom-6 right-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-2xl p-6 flex items-center gap-3 hover:scale-110 transition-all duration-300 z-30 animate-bounce"
+          className="fixed bottom-6 right-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-2xl p-6 flex items-center gap-3 hover:scale-110 transition-all duration-300 z-30 animate-bounce touch-manipulation"
         >
           <div className="relative">
             <ShoppingBag size={32} />

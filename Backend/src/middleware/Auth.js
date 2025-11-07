@@ -21,7 +21,13 @@ exports.authenticate = async (req, res, next) => {
       token,
       process.env.JWT_SECRET || "your-secret-key"
     );
-    req.user = decoded;
+
+    // Normalize the user object to always have 'id' property
+    req.user = {
+      ...decoded,
+      id: decoded.id || decoded.userId || decoded._id,
+    };
+
     next();
   } catch (error) {
     return res.status(401).json({
@@ -30,7 +36,6 @@ exports.authenticate = async (req, res, next) => {
     });
   }
 };
-
 // Role-based middleware
 exports.authorize = (...roles) => {
   return (req, res, next) => {

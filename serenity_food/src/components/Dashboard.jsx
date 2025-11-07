@@ -1,736 +1,785 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   TrendingUp,
-  ShoppingCart,
-  Package,
-  Clock,
-  ArrowUp,
   DollarSign,
-  User,
-  Shield,
-  ChevronDown,
-  ChevronUp,
+  Package,
+  Users,
   Calendar,
-  Smartphone,
-  Banknote,
+  Clock,
+  Award,
+  Target,
+  ShoppingCart,
   TrendingDown,
   AlertCircle,
+  CheckCircle,
+  RefreshCw,
 } from "lucide-react";
 
-export const Dashboard = ({ summaryData, credits }) => {
+const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
+
+export const Dashboard = () => {
   const [user, setUser] = useState(null);
-  const [expandedWalkIn, setExpandedWalkIn] = useState(false);
-  const [expandedCatering, setExpandedCatering] = useState(false);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState("today");
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-  }, []);
+    fetchDashboardData();
+  }, [selectedPeriod]);
 
-  const analytics = useMemo(() => {
-    if (!summaryData) {
-      return {
-        walkInTotal: 0,
-        cateringPaid: 0,
-        creditTotal: 0,
-        grandTotal: 0,
-        walkInCount: 0,
-        cateringCount: 0,
-        creditCount: 0,
-        walkInSales: [],
-        cateringSales: [],
-        mpesaTotal: 0,
-        cashTotal: 0,
-        mpesaCount: 0,
-        cashCount: 0,
-        splitTotal: 0,
-        splitCount: 0,
-      };
+  const fetchDashboardData = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setLoading(false);
+      return;
     }
 
-    const walkInData = summaryData.todaySales?.find(
-      (s) => s._id === "walk-in"
-    ) || { totalAmount: 0, count: 0 };
-    const cateringData = summaryData.todaySales?.find(
-      (s) => s._id === "outside-catering"
-    ) || { totalAmount: 0, count: 0 };
-    const creditTotal = credits.reduce((sum, c) => sum + c.amount, 0);
+    setLoading(true);
+    try {
+      // Fetch current user
+      const userRes = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const userData = await userRes.json();
 
-    const walkInSales = summaryData.walkInSales || [];
-    const cateringSales = summaryData.cateringSales || [];
+      if (userData.success) {
+        setUser(userData.data);
 
-    // Calculate payment method totals from actual transactions
-    let mpesaTotal = 0;
-    let cashTotal = 0;
-    let splitTotal = 0;
-    let mpesaCount = 0;
-    let cashCount = 0;
-    let splitCount = 0;
+        // Fetch role-specific stats
+        const statsRes = await fetch(
+          `${API_BASE_URL}/dashboard/${userData.data.role}?period=${selectedPeriod}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const statsData = await statsRes.json();
 
-    [...walkInSales, ...cateringSales.filter((s) => s.isPaid)].forEach(
-      (sale) => {
-        if (sale.paymentMethod === "mpesa") {
-          mpesaTotal += sale.totalAmount || 0;
-          mpesaCount++;
-        } else if (sale.paymentMethod === "cash") {
-          cashTotal += sale.totalAmount || 0;
-          cashCount++;
-        } else if (sale.paymentMethod === "split") {
-          splitTotal += sale.totalAmount || 0;
-          splitCount++;
-          // Also count split payment components
-          if (sale.splitPayment) {
-            mpesaTotal += sale.splitPayment.mpesa || 0;
-            cashTotal += sale.splitPayment.cash || 0;
+        if (statsData.success) {
+          let statsWithCredits = { ...statsData.data };
+
+          // Fetch credits for manager and vendor roles (outside catering only)
+          if (
+            userData.data.role === "manager" ||
+            userData.data.role === "vendor"
+          ) {
+            try {
+              const creditsRes = await fetch(
+                `${API_BASE_URL}/outside-catering/credits`,
+                {
+                  headers: { Authorization: `Bearer ${token}` },
+                }
+              );
+
+              if (!creditsRes.ok) {
+                throw new Error(`HTTP ${creditsRes.status}`);
+              }
+
+              const creditsData = await creditsRes.json();
+
+              if (creditsData.success && Array.isArray(creditsData.data)) {
+                const outstandingCredits = creditsData.data.filter(
+                  (c) => !c.isPaid
+                );
+
+                // Add day past due calculation if not present
+                const enrichedCredits = outstandingCredits.map((credit) => {
+                  if (!credit.daysPastDue && credit.dueDate) {
+                    const dueDate = new Date(credit.dueDate);
+                    const today = new Date();
+                    const diffTime = today - dueDate;
+                    const diffDays = Math.ceil(
+                      diffTime / (1000 * 60 * 60 * 24)
+                    );
+                    return { ...credit, daysPastDue: Math.max(0, diffDays) };
+                  }
+                  return credit;
+                });
+
+                statsWithCredits.outstandingCredits = enrichedCredits;
+                statsWithCredits.totalOutstanding = enrichedCredits.reduce(
+                  (sum, c) => sum + c.amount,
+                  0
+                );
+              } else {
+                statsWithCredits.outstandingCredits = [];
+                statsWithCredits.totalOutstanding = 0;
+              }
+            } catch (err) {
+              console.error("Failed to fetch credits:", err);
+              statsWithCredits.outstandingCredits = [];
+              statsWithCredits.totalOutstanding = 0;
+            }
           }
+
+          setStats(statsWithCredits);
         }
       }
-    );
-
-    return {
-      walkInTotal: walkInData.totalAmount,
-      cateringPaid: cateringData.totalAmount,
-      creditTotal,
-      grandTotal: walkInData.totalAmount + cateringData.totalAmount,
-      walkInCount: walkInData.count,
-      cateringCount: cateringData.count,
-      creditCount: credits.length,
-      walkInSales: walkInSales.sort(
-        (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-      ),
-      cateringSales: cateringSales.sort(
-        (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-      ),
-      mpesaTotal,
-      cashTotal,
-      splitTotal,
-      mpesaCount,
-      cashCount,
-      splitCount,
-    };
-  }, [summaryData, credits]);
-
-  const canViewFullDashboard = user?.role === "manager";
-  const canViewSales =
-    user?.role === "manager" || user?.role === "shop-attendant";
-
-  const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const formatCurrency = (amount) => {
-    return `KSh ${amount.toLocaleString()}`;
-  };
-
-  const getPaymentIcon = (method) => {
-    if (method === "mpesa") return <Smartphone className="w-4 h-4" />;
-    if (method === "cash") return <Banknote className="w-4 h-4" />;
-    return <DollarSign className="w-4 h-4" />;
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-pink-50 to-rose-50 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 rounded-3xl shadow-2xl p-8">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              {summaryData?.date && (
-                <div className="flex items-center gap-3 bg-white bg-opacity-20 px-5 py-3 rounded-xl w-fit backdrop-blur-sm">
-                  <Calendar className="w-6 h-6 text-white" />
-                  <p className="text-lg text-white font-bold">
-                    {new Date(summaryData.date).toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {user && (
-              <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-xl shadow-lg border-2 border-red-500">
-                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl flex items-center justify-center shadow-md">
-                  <User className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <p className="font-bold text-gray-900 text-base">
-                    {user.fullName}
-                  </p>
-                  <div className="flex items-center gap-1">
-                    <Shield className="w-4 h-4 text-red-600" />
-                    <span className="text-xs font-bold text-red-600 uppercase">
-                      {user.role}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Total Revenue Card */}
-        <div className="bg-gradient-to-br from-red-500 via-rose-500 to-red-600 rounded-3xl shadow-2xl p-8">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="p-4 bg-white rounded-xl shadow-lg">
-              <DollarSign size={32} className="text-red-600" />
-            </div>
-            <div>
-              <h3 className="text-white text-xl font-bold">
-                {canViewFullDashboard ? "TOTAL REVENUE" : "TODAY'S SALES"}
-              </h3>
-              <p className="text-white text-base opacity-90">
-                {canViewFullDashboard
-                  ? "All paid transactions today"
-                  : "Your transactions today"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-end gap-3 mb-6">
-            <p className="text-white text-6xl font-bold">
-              {formatCurrency(analytics.grandTotal)}
-            </p>
-            <div className="flex items-center gap-2 bg-white bg-opacity-20 px-4 py-2 rounded-xl mb-2 backdrop-blur-sm">
-              <ArrowUp size={20} className="text-white" />
-              <span className="text-white text-base font-bold">LIVE</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white text-sm mb-2 font-medium">
-                Transactions
-              </p>
-              <p className="text-white text-2xl font-bold">
-                {analytics.walkInCount + analytics.cateringCount}
-              </p>
-            </div>
-            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white text-sm mb-2 font-medium">Walk-In</p>
-              <p className="text-white text-2xl font-bold">
-                {analytics.walkInCount}
-              </p>
-            </div>
-            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white text-sm mb-2 font-medium">Catering</p>
-              <p className="text-white text-2xl font-bold">
-                {analytics.cateringCount}
-              </p>
-            </div>
-            <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur-sm">
-              <p className="text-white text-sm mb-2 font-medium">Pending</p>
-              <p className="text-white text-2xl font-bold">
-                {analytics.creditCount}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        {canViewSales && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Walk-In Card */}
-            <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-red-500 hover:shadow-2xl transition-all">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
-                  <ShoppingCart size={28} className="text-white" />
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-600 uppercase">
-                    Walk-In
-                  </p>
-                  <p className="text-xs text-gray-500 font-medium mt-1">
-                    {analytics.walkInCount} sales
-                  </p>
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-gray-900 mb-3">
-                {formatCurrency(analytics.walkInTotal)}
-              </p>
-              <div className="flex items-center gap-2 text-sm text-red-600 font-bold">
-                <TrendingUp size={16} />
-                <span>Active today</span>
-              </div>
-            </div>
-
-            {/* Catering Card */}
-            <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-red-500 hover:shadow-2xl transition-all">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
-                  <Package size={28} className="text-white" />
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-600 uppercase">
-                    Catering
-                  </p>
-                  <p className="text-xs text-gray-500 font-medium mt-1">
-                    {analytics.cateringCount} paid
-                  </p>
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-gray-900 mb-3">
-                {formatCurrency(analytics.cateringPaid)}
-              </p>
-              <div className="flex items-center gap-2 text-sm text-red-600 font-bold">
-                <TrendingUp size={16} />
-                <span>Completed</span>
-              </div>
-            </div>
-
-            {/* Pending Credit Card */}
-            <div className="bg-white rounded-2xl shadow-xl p-6 border-2 border-rose-500 hover:shadow-2xl transition-all">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-gradient-to-br from-rose-500 to-red-600 rounded-xl shadow-md">
-                  <Clock size={28} className="text-white" />
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-600 uppercase">
-                    Pending
-                  </p>
-                  <p className="text-xs text-gray-500 font-medium mt-1">
-                    {analytics.creditCount} credits
-                  </p>
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-gray-900 mb-3">
-                {formatCurrency(analytics.creditTotal)}
-              </p>
-              <div className="flex items-center gap-2 text-sm text-rose-600 font-bold">
-                <AlertCircle size={16} />
-                <span>Awaiting payment</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Payment Methods - M-PESA and Cash Totals */}
-        {canViewFullDashboard &&
-          (analytics.mpesaTotal > 0 || analytics.cashTotal > 0) && (
-            <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-red-500">
-              <div className="flex items-center gap-4 mb-8">
-                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
-                  <DollarSign size={28} className="text-white" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900">
-                  Payment Methods Breakdown
-                </h3>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-6">
-                {/* M-PESA */}
-                <div className="p-6 rounded-2xl border-2 border-red-500 hover:shadow-xl transition-all bg-gradient-to-br from-green-50 to-emerald-50">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-3 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl shadow-md">
-                      <Smartphone className="w-6 h-6 text-white" />
-                    </div>
-                    <p className="text-lg font-bold text-gray-900 uppercase">
-                      M-PESA
-                    </p>
-                  </div>
-                  <div className="flex items-end justify-between">
-                    <p className="text-3xl font-bold text-gray-900">
-                      {formatCurrency(analytics.mpesaTotal)}
-                    </p>
-                    <p className="text-xl font-bold text-gray-500">
-                      {analytics.mpesaCount}{" "}
-                      <span className="text-sm">txns</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Cash */}
-                <div className="p-6 rounded-2xl border-2 border-red-500 hover:shadow-xl transition-all bg-gradient-to-br from-amber-50 to-yellow-50">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="p-3 bg-gradient-to-br from-amber-600 to-yellow-600 rounded-xl shadow-md">
-                      <Banknote className="w-6 h-6 text-white" />
-                    </div>
-                    <p className="text-lg font-bold text-gray-900 uppercase">
-                      CASH
-                    </p>
-                  </div>
-                  <div className="flex items-end justify-between">
-                    <p className="text-3xl font-bold text-gray-900">
-                      {formatCurrency(analytics.cashTotal)}
-                    </p>
-                    <p className="text-xl font-bold text-gray-500">
-                      {analytics.cashCount}{" "}
-                      <span className="text-sm">txns</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Split Payment Info */}
-              {analytics.splitCount > 0 && (
-                <div className="mt-6 p-5 bg-red-50 rounded-xl border-2 border-red-200">
-                  <p className="text-sm font-bold text-gray-700 mb-2">
-                    Note: Split Payments ({analytics.splitCount} transactions)
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Split payments of {formatCurrency(analytics.splitTotal)} are
-                    included in the M-PESA and Cash totals above based on their
-                    respective portions.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-        {/* Walk-In Sales Section */}
-        {canViewSales && analytics.walkInSales.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-red-500">
-            <button
-              onClick={() => setExpandedWalkIn(!expandedWalkIn)}
-              className="w-full p-6 flex items-center justify-between hover:bg-red-50 transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
-                  <ShoppingCart size={24} className="text-white" />
-                </div>
-                <div className="text-left">
-                  <h3 className="text-2xl font-bold text-gray-900">
-                    Walk-In Sales
-                  </h3>
-                  <p className="text-base text-red-600 font-bold">
-                    {analytics.walkInSales.length} transactions •{" "}
-                    {formatCurrency(analytics.walkInTotal)}
-                  </p>
-                </div>
-              </div>
-              {expandedWalkIn ? (
-                <ChevronUp className="w-7 h-7 text-gray-900" />
-              ) : (
-                <ChevronDown className="w-7 h-7 text-gray-900" />
-              )}
-            </button>
-
-            {expandedWalkIn && (
-              <div className="p-6 pt-0 space-y-4 max-h-[600px] overflow-y-auto">
-                {analytics.walkInSales.map((sale, idx) => (
-                  <div
-                    key={sale._id || idx}
-                    className="p-5 bg-gradient-to-r from-red-50 to-rose-50 rounded-xl border-2 border-red-200 hover:border-red-500 transition-all"
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold text-sm rounded-lg shadow-md">
-                            {formatTime(sale.timestamp)}
-                          </span>
-                          <span className="text-sm text-gray-600 font-bold">
-                            #{idx + 1}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-700 font-bold">
-                          👤 {sale.recordedBy?.fullName || "Unknown"}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-3xl font-bold text-gray-900">
-                          {formatCurrency(sale.totalAmount)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mb-4 bg-white rounded-xl p-4 border-2 border-red-100 shadow-sm">
-                      {sale.items?.map((item, itemIdx) => (
-                        <div
-                          key={itemIdx}
-                          className="flex justify-between items-center text-sm"
-                        >
-                          <span className="font-bold text-gray-800">
-                            {item.name}{" "}
-                            <span className="text-red-600">
-                              ×{item.quantity}
-                            </span>
-                          </span>
-                          <span className="font-bold text-gray-900">
-                            {formatCurrency(item.total)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm shadow-md ${
-                          sale.paymentMethod === "mpesa"
-                            ? "bg-gradient-to-r from-green-600 to-emerald-600 text-white"
-                            : sale.paymentMethod === "split"
-                            ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
-                            : "bg-gradient-to-r from-gray-700 to-gray-800 text-white"
-                        }`}
-                      >
-                        {getPaymentIcon(sale.paymentMethod)}
-                        {sale.paymentMethod === "mpesa"
-                          ? "M-PESA"
-                          : sale.paymentMethod === "split"
-                          ? "SPLIT"
-                          : "CASH"}
-                      </div>
-                      {sale.mpesaCode && (
-                        <span className="text-sm text-gray-600 font-mono bg-gray-100 px-3 py-2 rounded-lg border border-gray-300">
-                          {sale.mpesaCode}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Catering Sales Section */}
-        {canViewSales && analytics.cateringSales.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-red-500">
-            <button
-              onClick={() => setExpandedCatering(!expandedCatering)}
-              className="w-full p-6 flex items-center justify-between hover:bg-red-50 transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-md">
-                  <Package size={24} className="text-white" />
-                </div>
-                <div className="text-left">
-                  <h3 className="text-2xl font-bold text-gray-900">
-                    Outside Catering Orders
-                  </h3>
-                  <p className="text-base text-red-600 font-bold">
-                    {analytics.cateringSales.length} orders •{" "}
-                    {formatCurrency(analytics.cateringPaid)}
-                  </p>
-                </div>
-              </div>
-              {expandedCatering ? (
-                <ChevronUp className="w-7 h-7 text-gray-900" />
-              ) : (
-                <ChevronDown className="w-7 h-7 text-gray-900" />
-              )}
-            </button>
-
-            {expandedCatering && (
-              <div className="p-6 pt-0 space-y-4 max-h-[600px] overflow-y-auto">
-                {analytics.cateringSales.map((sale, idx) => (
-                  <div
-                    key={sale._id || idx}
-                    className={`p-5 rounded-xl border-2 hover:border-red-500 transition-all ${
-                      sale.isPaid
-                        ? "bg-gradient-to-r from-red-50 to-rose-50 border-red-200"
-                        : "bg-gradient-to-r from-rose-100 to-red-100 border-rose-300"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span
-                            className={`px-4 py-2 font-bold text-sm rounded-lg shadow-md ${
-                              sale.isPaid
-                                ? "bg-gradient-to-r from-red-600 to-rose-600 text-white"
-                                : "bg-gradient-to-r from-rose-600 to-red-700 text-white"
-                            }`}
-                          >
-                            {formatTime(sale.timestamp)}
-                          </span>
-                          <span className="text-sm text-gray-600 font-bold">
-                            #{idx + 1}
-                          </span>
-                        </div>
-                        <p className="text-base font-bold text-gray-900 mb-2">
-                          🏢 {sale.customerName || sale.vendorName || "N/A"}
-                        </p>
-                        <p className="text-sm text-gray-700 font-bold">
-                          👤 {sale.recordedBy?.fullName || "Unknown"}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span
-                          className={`text-3xl font-bold ${
-                            sale.isPaid ? "text-gray-900" : "text-rose-600"
-                          }`}
-                        >
-                          {formatCurrency(sale.totalAmount)}
-                        </span>
-                        <div className="mt-2">
-                          {sale.isPaid ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-sm font-bold rounded-lg shadow-md">
-                              ✓ PAID
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-rose-600 to-red-700 text-white text-sm font-bold rounded-lg shadow-md">
-                              ⏰ PENDING
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mb-4 bg-white rounded-xl p-4 border-2 border-red-100 shadow-sm">
-                      {sale.items?.map((item, itemIdx) => (
-                        <div
-                          key={itemIdx}
-                          className="flex justify-between items-center text-sm"
-                        >
-                          <span className="font-bold text-gray-800">
-                            {item.name}{" "}
-                            <span className="text-red-600">
-                              ×{item.quantity}
-                            </span>
-                          </span>
-                          <span className="font-bold text-gray-900">
-                            {formatCurrency(item.total)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {sale.returnedItems?.length > 0 && (
-                      <div className="mb-4 p-3 bg-rose-100 rounded-xl border-2 border-rose-300 shadow-sm">
-                        <p className="text-sm font-bold text-rose-800 mb-2 uppercase">
-                          ⚠️ Returned Items
-                        </p>
-                        {sale.returnedItems.map((ret, retIdx) => (
-                          <p
-                            key={retIdx}
-                            className="text-sm text-rose-700 font-bold"
-                          >
-                            • {ret.item} ({ret.quantity}) - {ret.reason}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-
-                    {sale.isPaid && (
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm shadow-md ${
-                            sale.paymentMethod === "mpesa"
-                              ? "bg-gradient-to-r from-green-600 to-emerald-600 text-white"
-                              : sale.paymentMethod === "split"
-                              ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
-                              : "bg-gradient-to-r from-gray-700 to-gray-800 text-white"
-                          }`}
-                        >
-                          {getPaymentIcon(sale.paymentMethod)}
-                          {sale.paymentMethod === "mpesa"
-                            ? "M-PESA"
-                            : sale.paymentMethod === "split"
-                            ? "SPLIT"
-                            : "CASH"}
-                        </div>
-                        {sale.mpesaCode && (
-                          <span className="text-sm text-gray-600 font-mono bg-gray-100 px-3 py-2 rounded-lg border border-gray-300">
-                            {sale.mpesaCode}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Outstanding Credits */}
-        {canViewSales && credits.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-rose-500">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="p-3 bg-gradient-to-br from-rose-500 to-red-600 rounded-xl shadow-md">
-                <AlertCircle size={28} className="text-white" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">
-                  Outstanding Credits
-                </h3>
-                <p className="text-base text-rose-600 font-bold">
-                  {credits.length} pending •{" "}
-                  {formatCurrency(analytics.creditTotal)}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {credits.map((credit, idx) => (
-                <div
-                  key={idx}
-                  className="p-5 bg-gradient-to-r from-rose-50 to-red-50 rounded-xl border-2 border-rose-300 hover:border-rose-500 transition-all shadow-sm"
-                >
-                  <div className="flex justify-between items-start gap-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-900 text-lg mb-2 truncate">
-                        🏢 {credit.customerName || credit.vendorName}
-                      </p>
-                      <p className="text-sm text-gray-700 font-bold mb-3 line-clamp-2">
-                        {credit.items?.map((item) => item.name).join(", ")}
-                      </p>
-                      {credit.date && (
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Calendar className="w-4 h-4" />
-                          <span className="font-bold">
-                            {new Date(credit.date).toLocaleDateString()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-rose-600 text-2xl whitespace-nowrap block mb-2">
-                        {formatCurrency(credit.amount)}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-rose-600 to-red-700 text-white text-sm font-bold rounded-lg shadow-md">
-                        UNPAID
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Vendor Welcome Message */}
-        {user?.role === "vendor" && (
-          <div className="bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl shadow-2xl p-16 text-center">
-            <div className="inline-block p-6 bg-white bg-opacity-20 rounded-2xl mb-6 backdrop-blur-sm">
-              <Package size={56} className="text-white" />
-            </div>
-            <h3 className="text-4xl font-bold text-white mb-3">
-              Welcome, {user.fullName}! 👋
-            </h3>
-            <p className="text-xl text-white opacity-90">
-              Use the sidebar to manage your products and view your sales
-              performance.
-            </p>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {canViewSales &&
-          analytics.walkInCount === 0 &&
-          analytics.cateringCount === 0 && (
-            <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl shadow-xl p-20 text-center border-2 border-gray-200">
-              <TrendingDown size={80} className="text-gray-300 mx-auto mb-6" />
-              <h3 className="text-3xl font-bold text-gray-400 mb-3">
-                No Sales Yet Today
-              </h3>
-              <p className="text-lg text-gray-500">
-                Start recording transactions to see them appear here.
-              </p>
-            </div>
-          )}
-
-        {/* Footer */}
-        <div className="text-center py-8">
-          <p className="text-sm text-gray-500 font-medium">
-            © 2024 Restaurant POS System. All rights reserved.
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-black">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white font-bold text-lg">
+            Loading your dashboard...
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-8">
+        <div className="bg-red-900 rounded-2xl p-8 text-center max-w-md">
+          <AlertCircle className="mx-auto mb-4 text-white" size={48} />
+          <p className="text-white text-lg font-bold">
+            Please log in to view your dashboard
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black p-4">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-red-900 via-black to-red-900 rounded-3xl shadow-2xl p-8 mb-6 border-2 border-red-900">
+        <div className="flex justify-between items-start flex-wrap gap-4">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Welcome back, {user.fullName}! 🔥
+            </h1>
+            <p className="text-red-300 text-lg">
+              {user.role === "manager" && "Managing Serenity Food Court"}
+              {user.role === "shop-attendant" && "Walk-In Sales Dashboard"}
+              {user.role === "vendor" && "Outside Catering Dashboard"}
+            </p>
+          </div>
+
+          {/* Period Selector */}
+          <div className="flex gap-2 bg-red-900/30 backdrop-blur-sm rounded-xl p-2 border border-red-900">
+            {["today", "week", "month"].map((period) => (
+              <button
+                key={period}
+                onClick={() => setSelectedPeriod(period)}
+                className={`px-6 py-2 rounded-lg font-bold transition-all ${
+                  selectedPeriod === period
+                    ? "bg-red-900 text-white shadow-lg"
+                    : "text-white hover:bg-red-900/50"
+                }`}
+              >
+                {period.charAt(0).toUpperCase() + period.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Role-Based Dashboard Content */}
+      {user.role === "manager" && <ManagerDashboard stats={stats} />}
+      {user.role === "shop-attendant" && (
+        <ShopAttendantDashboard stats={stats} user={user} />
+      )}
+      {user.role === "vendor" && <VendorDashboard stats={stats} user={user} />}
+    </div>
+  );
+};
+
+// Manager Dashboard - Full Access
+const ManagerDashboard = ({ stats }) => {
+  if (!stats) return null;
+
+  return (
+    <div className="space-y-6">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          icon={<DollarSign className="text-red-900" size={32} />}
+          label="Total Revenue"
+          value={`KSh ${stats.totalRevenue?.toLocaleString() || 0}`}
+          trend={stats.revenueTrend}
+          bgColor="bg-white"
+          borderColor="border-red-900"
+        />
+        <MetricCard
+          icon={<ShoppingCart className="text-red-900" size={32} />}
+          label="Walk-In Sales"
+          value={`KSh ${stats.walkInSales?.toLocaleString() || 0}`}
+          count={`${stats.walkInCount || 0} transactions`}
+          bgColor="bg-white"
+          borderColor="border-red-900"
+        />
+        <MetricCard
+          icon={<Package className="text-red-900" size={32} />}
+          label="Outside Catering"
+          value={`KSh ${stats.cateringSales?.toLocaleString() || 0}`}
+          count={`${stats.cateringRounds || 0} rounds`}
+          bgColor="bg-white"
+          borderColor="border-red-900"
+        />
+        <MetricCard
+          icon={<TrendingUp className="text-red-900" size={32} />}
+          label="Net Profit"
+          value={`KSh ${stats.netProfit?.toLocaleString() || 0}`}
+          trend={stats.profitMargin}
+          bgColor="bg-white"
+          borderColor="border-red-900"
+        />
+      </div>
+
+      {/* Staff Performance */}
+      {stats.staffPerformance && stats.staffPerformance.length > 0 && (
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-white">
+            <Users size={24} />
+            Staff Performance
+          </h3>
+          <div className="space-y-3">
+            {stats.staffPerformance.map((staff) => (
+              <div
+                key={staff.userId}
+                className="bg-black rounded-xl p-4 border-2 border-red-900"
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <div>
+                    <p className="font-bold text-white">{staff.name}</p>
+                    <p className="text-sm text-red-300 capitalize">
+                      {staff.role}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-red-900">
+                      KSh {staff.salesAmount?.toLocaleString() || 0}
+                    </p>
+                    <p className="text-sm text-red-300">
+                      {staff.role === "vendor"
+                        ? `${staff.rounds || 0} rounds completed`
+                        : `${staff.transactions || 0} transactions`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-3 border-t border-red-900">
+                  <span className="text-sm font-medium text-red-300">
+                    {staff.role === "vendor"
+                      ? "Commission (19%)"
+                      : "Daily Wage"}
+                    :
+                  </span>
+                  <span className="text-lg font-bold text-white">
+                    KSh {staff.earnings?.toLocaleString() || 0}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Expenses & Profit Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
+            <TrendingDown size={24} />
+            Expenses Breakdown
+          </h3>
+          <div className="space-y-3">
+            {stats.expenses && stats.expenses.length > 0 ? (
+              <>
+                {stats.expenses.map((expense, idx) => (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-center pb-3 border-b border-white/20 last:border-0"
+                  >
+                    <span className="font-medium text-red-300">
+                      {expense.category}
+                    </span>
+                    <span className="font-bold text-white">
+                      KSh {expense.amount?.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-3 border-t-2 border-white">
+                  <span className="font-bold text-white">Total Expenses:</span>
+                  <span className="text-xl font-bold text-white">
+                    KSh {stats.totalExpenses?.toLocaleString() || 0}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-red-300 text-center py-4">
+                No expenses recorded
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
+            <Target size={24} />
+            Profit Analysis
+          </h3>
+          <div className="space-y-4">
+            <div className="bg-black rounded-xl p-4 border-2 border-white">
+              <p className="text-sm text-red-300 mb-1">Gross Revenue</p>
+              <p className="text-3xl font-bold text-white">
+                KSh {stats.totalRevenue?.toLocaleString() || 0}
+              </p>
+            </div>
+            <div className="bg-black rounded-xl p-4 border-2 border-red-900">
+              <p className="text-sm text-red-300 mb-1">Total Costs</p>
+              <p className="text-3xl font-bold text-white">
+                KSh{" "}
+                {(
+                  (stats.totalExpenses || 0) + (stats.staffWages || 0)
+                )?.toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border-2 border-red-900">
+              <p className="text-sm text-red-900 mb-1">Net Profit</p>
+              <p className="text-4xl font-bold text-red-900">
+                KSh {stats.netProfit?.toLocaleString() || 0}
+              </p>
+              <p className="text-sm text-black mt-2">
+                Margin: {stats.profitMargin?.toFixed(1) || 0}%
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Outstanding Credits */}
+      {stats.outstandingCredits && stats.outstandingCredits.length > 0 && (
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
+            <AlertCircle size={24} />
+            Outstanding Credits ({stats.outstandingCredits.length})
+          </h3>
+          <div className="space-y-2">
+            {stats.outstandingCredits.map((credit) => {
+              const dueDate = new Date(credit.dueDate);
+              const formattedDate = dueDate.toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              });
+
+              return (
+                <div
+                  key={credit._id}
+                  className="bg-black rounded-xl p-4 border-2 border-red-900"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-white">
+                        {credit.customerName}
+                      </p>
+                      <p className="text-sm text-red-300">
+                        Due: {formattedDate}
+                        {credit.daysPastDue > 0 && (
+                          <span className="text-red-500 font-semibold ml-2">
+                            ({credit.daysPastDue} days overdue)
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <p className="text-xl font-bold text-red-900">
+                      KSh {credit.amount?.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="bg-white rounded-xl p-4 border-2 border-red-900 mt-4">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-black">Total Outstanding:</span>
+                <span className="text-2xl font-bold text-red-900">
+                  KSh {stats.totalOutstanding?.toLocaleString() || 0}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Shop Attendant Dashboard - Walk-In Sales Focus
+const ShopAttendantDashboard = ({ stats, user }) => {
+  if (!stats) return null;
+
+  const dailyWage = 550;
+
+  return (
+    <div className="space-y-6">
+      {/* Personal Earnings */}
+      <div className="bg-gradient-to-r from-red-900 via-black to-red-900 rounded-2xl shadow-2xl p-8 border-2 border-white">
+        <div className="flex items-center gap-4 mb-4">
+          <Award size={48} className="text-white" />
+          <div>
+            <h2 className="text-3xl font-bold text-white">
+              Your Earnings Today
+            </h2>
+            <p className="text-red-300">Fixed daily wage</p>
+          </div>
+        </div>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border-2 border-white">
+          <p className="text-5xl font-bold text-white">
+            KSh {dailyWage.toLocaleString()}
+          </p>
+          <p className="text-red-300 mt-2">Daily Rate</p>
+        </div>
+      </div>
+
+      {/* Your Performance */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <MetricCard
+          icon={<ShoppingCart className="text-red-900" size={32} />}
+          label="Sales Processed"
+          value={stats.salesCount || 0}
+          subtext="transactions"
+          bgColor="bg-white"
+          borderColor="border-red-900"
+        />
+        <MetricCard
+          icon={<DollarSign className="text-red-900" size={32} />}
+          label="Total Sales Value"
+          value={`KSh ${stats.totalSales?.toLocaleString() || 0}`}
+          bgColor="bg-white"
+          borderColor="border-red-900"
+        />
+        <MetricCard
+          icon={<TrendingUp className="text-red-900" size={32} />}
+          label="Average Sale"
+          value={`KSh ${stats.averageSale?.toLocaleString() || 0}`}
+          bgColor="bg-white"
+          borderColor="border-red-900"
+        />
+      </div>
+
+      {/* Performance Metrics */}
+      <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+        <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-white">
+          <Target size={24} />
+          Your Performance
+        </h3>
+        <div className="space-y-4">
+          <div className="bg-black rounded-xl p-4 border-2 border-white">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-medium text-red-300">Today's Target</span>
+              <span className="font-bold text-white">20 sales</span>
+            </div>
+            <div className="w-full bg-white/20 rounded-full h-4">
+              <div
+                className="bg-gradient-to-r from-red-900 to-white h-4 rounded-full transition-all"
+                style={{
+                  width: `${Math.min(
+                    ((stats.salesCount || 0) / 20) * 100,
+                    100
+                  )}%`,
+                }}
+              ></div>
+            </div>
+            <p className="text-sm text-red-300 mt-2">
+              {stats.salesCount || 0} of 20 completed (
+              {Math.round(((stats.salesCount || 0) / 20) * 100)}%)
+            </p>
+          </div>
+
+          <div className="bg-black rounded-xl p-4 border-2 border-red-900">
+            <p className="font-medium text-white mb-2">
+              Payment Methods Breakdown
+            </p>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-red-300">Cash:</span>
+                <span className="font-bold text-white">
+                  KSh {stats.cashSales?.toLocaleString() || 0}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-red-300">M-Pesa:</span>
+                <span className="font-bold text-white">
+                  KSh {stats.mpesaSales?.toLocaleString() || 0}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-red-300">Split:</span>
+                <span className="font-bold text-white">
+                  KSh {stats.splitSales?.toLocaleString() || 0}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Selling Items */}
+      {stats.topItems && stats.topItems.length > 0 && (
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
+            <Package size={24} />
+            Top Selling Items Today
+          </h3>
+          <div className="space-y-3">
+            {stats.topItems.map((item, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between bg-black rounded-xl p-4 border-2 border-red-900"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl">{item.icon || "🍽️"}</span>
+                  <div>
+                    <p className="font-bold text-white">{item.name}</p>
+                    <p className="text-sm text-red-300">{item.quantity} sold</p>
+                  </div>
+                </div>
+                <p className="font-bold text-red-900">
+                  KSh {item.total?.toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Vendor Dashboard - Outside Catering Commission Focus
+const VendorDashboard = ({ stats, user }) => {
+  if (!stats) return null;
+
+  const commissionRate = 0.19; // 19%
+
+  return (
+    <div className="space-y-6">
+      {/* Commission Earnings - Hero Section */}
+      <div className="bg-gradient-to-r from-red-900 via-black to-red-900 rounded-2xl shadow-2xl p-8 border-2 border-white">
+        <div className="flex items-center gap-4 mb-4">
+          <Award size={48} className="flex-shrink-0 text-white" />
+          <div>
+            <h2 className="text-3xl font-bold text-white">
+              Your Commission Today
+            </h2>
+            <p className="text-red-300">19% of net sales from rounds</p>
+          </div>
+        </div>
+        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-4 border-2 border-white">
+          <p className="text-6xl font-bold mb-2 text-white">
+            KSh {stats.totalCommission?.toLocaleString() || 0}
+          </p>
+          <p className="text-red-300">
+            From {stats.roundsCompleted || 0} rounds completed
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-black rounded-xl p-4 border-2 border-red-900">
+            <p className="text-sm text-red-300">Gross Sales</p>
+            <p className="text-2xl font-bold text-white">
+              KSh {stats.grossSales?.toLocaleString() || 0}
+            </p>
+          </div>
+          <div className="bg-black rounded-xl p-4 border-2 border-red-900">
+            <p className="text-sm text-red-300">Returns</p>
+            <p className="text-2xl font-bold text-white">
+              KSh {stats.totalReturns?.toLocaleString() || 0}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Today's Rounds */}
+      {stats.rounds && stats.rounds.length > 0 && (
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-white">
+            <Clock size={24} />
+            Today's Rounds ({stats.roundsCompleted || 0})
+          </h3>
+          <div className="space-y-3">
+            {stats.rounds.map((round, idx) => (
+              <div
+                key={idx}
+                className="bg-black rounded-xl p-4 border-2 border-red-900"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <p className="font-bold text-white text-lg">
+                      Round {round.number}
+                    </p>
+                    <p className="text-sm text-red-300">
+                      {new Date(round.startTime).toLocaleTimeString()} -{" "}
+                      {new Date(round.endTime).toLocaleTimeString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-white">
+                      KSh {round.netTotal?.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-red-300">Net Sales</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 pt-3 border-t border-red-900">
+                  <div>
+                    <p className="text-xs text-red-300">Expected</p>
+                    <p className="font-bold text-white">
+                      KSh {round.expected?.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-red-300">Returns</p>
+                    <p className="font-bold text-white">
+                      KSh {round.returns?.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="bg-red-900 rounded-lg p-2 border border-white">
+                    <p className="text-xs text-red-300">Your Cut</p>
+                    <p className="font-bold text-white">
+                      KSh {round.commission?.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Credits Status */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
+            <DollarSign size={24} />
+            Credits Given Today
+          </h3>
+          <div className="bg-black rounded-xl p-6 border-2 border-red-900">
+            <p className="text-4xl font-bold text-white mb-2">
+              KSh {stats.creditsGiven?.toLocaleString() || 0}
+            </p>
+            <p className="text-sm text-red-300">
+              {stats.creditCount || 0} customers on credit
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-red-900 rounded-2xl shadow-2xl p-6 border-2 border-white">
+          <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
+            <CheckCircle size={24} />
+            Credits Collected
+          </h3>
+          <div className="bg-white rounded-xl p-6 border-2 border-red-900">
+            <p className="text-4xl font-bold text-red-900 mb-2">
+              KSh {stats.creditsCollected?.toLocaleString() || 0}
+            </p>
+            <p className="text-sm text-black">
+              {stats.collectionsCount || 0} payments received
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Outstanding Credits Warning */}
+      {stats.outstandingCredits && stats.outstandingCredits.length > 0 && (
+        <div className="bg-gradient-to-r from-red-900 via-black to-red-900 border-4 border-red-900 rounded-2xl p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-4">
+            <AlertCircle size={32} className="text-white" />
+            <div>
+              <h3 className="text-2xl font-bold text-white">
+                ⚠️ Outstanding Credits
+              </h3>
+              <p className="text-red-300">
+                These will be deducted from your commission!
+              </p>
+            </div>
+          </div>
+          <div className="bg-black/50 backdrop-blur-sm rounded-xl p-4 border-2 border-white">
+            <div className="space-y-2">
+              {stats.outstandingCredits.map((credit) => {
+                const dueDate = new Date(credit.dueDate);
+                const today = new Date();
+                const isOverdue = dueDate < today;
+
+                return (
+                  <div
+                    key={credit._id}
+                    className="flex justify-between items-center py-2 border-b border-white/30 last:border-0"
+                  >
+                    <div>
+                      <p className="font-bold text-white">
+                        {credit.customerName}
+                      </p>
+                      <p className="text-sm text-red-300">
+                        {credit.daysPastDue > 0
+                          ? `${credit.daysPastDue} days overdue`
+                          : isOverdue
+                          ? "Overdue"
+                          : `Due ${dueDate.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}`}
+                      </p>
+                    </div>
+                    <p className="text-xl font-bold text-white">
+                      KSh {credit.amount?.toLocaleString()}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-t-2 border-white mt-4 pt-4">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-lg text-white">
+                  Total at Risk:
+                </span>
+                <span className="text-3xl font-bold text-white">
+                  KSh {stats.totalOutstanding?.toLocaleString() || 0}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Reusable Metric Card Component
+const MetricCard = ({
+  icon,
+  label,
+  value,
+  subtext,
+  trend,
+  count,
+  bgColor,
+  borderColor,
+}) => {
+  return (
+    <div
+      className={`${bgColor} rounded-2xl shadow-2xl p-6 border-2 ${borderColor}`}
+    >
+      <div className="flex items-center justify-between mb-3">
+        {icon}
+        {trend && (
+          <span
+            className={`text-sm font-bold ${
+              trend > 0 ? "text-red-900" : "text-black"
+            }`}
+          >
+            {trend > 0 ? "↑" : "↓"} {Math.abs(trend)}%
+          </span>
+        )}
+      </div>
+      <p className="text-sm font-medium text-gray-600 mb-1">{label}</p>
+      <p className="text-3xl font-bold text-black mb-1">{value}</p>
+      {(subtext || count) && (
+        <p className="text-sm text-gray-600">{subtext || count}</p>
+      )}
     </div>
   );
 };

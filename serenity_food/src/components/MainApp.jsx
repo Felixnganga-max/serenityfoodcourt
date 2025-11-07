@@ -9,8 +9,7 @@ import UserManagement from "./UserManagement";
 import ExpensesManagement from "./Expenses";
 
 // API Configuration
-const API_BASE_URL =
-  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
+const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {

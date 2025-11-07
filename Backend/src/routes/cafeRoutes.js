@@ -6,6 +6,7 @@ const authController = require("../controllers/auth");
 const menuController = require("../controllers/menu");
 const expenseController = require("../controllers/expenses");
 const salesController = require("../controllers/sales");
+const dashboardController = require("../controllers/dashboard");
 
 // Remove this line - we'll use authController directly
 // const { authenticate, authorize, canViewSales } = require("../middleware/Auth");
@@ -200,8 +201,11 @@ router.delete(
 // =============================================
 // SALES ROUTES
 // =============================================
-router.post("/sales", authController.authenticate, salesController.createSale);
-
+router.post(
+  "/sales/create-sale",
+  authController.authenticate,
+  salesController.createSale
+);
 router.get(
   "/sales",
   authController.authenticate,
@@ -227,6 +231,28 @@ router.get(
   authController.authenticate,
   authController.authorize("manager"),
   salesController.getProfitAnalysis
+);
+
+// Dashboard routes
+router.get(
+  "/dashboard/manager",
+  authController.authenticate,
+  authController.authorize("manager"),
+  dashboardController.getManagerDashboard
+);
+
+router.get(
+  "/dashboard/shop-attendant",
+  authController.authenticate,
+  authController.authorize("shop-attendant"),
+  dashboardController.getShopAttendantDashboard
+);
+
+router.get(
+  "/dashboard/vendor",
+  authController.authenticate,
+  authController.authorize("vendor"),
+  dashboardController.getVendorDashboard
 );
 
 // router.get(
