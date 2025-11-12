@@ -67,9 +67,10 @@ const outsideCateringRoundSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+
   status: {
     type: String,
-    enum: ["completed"],
+    enum: ["in-progress", "completed"],
     default: "completed",
   },
   createdAt: {

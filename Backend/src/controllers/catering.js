@@ -54,26 +54,58 @@ const updateCreditStatus = async (credit) => {
   return credit;
 };
 
+/**
+ * Check if user can view commission data
+ * Only managers and vendors can see commission amounts
+ */
+const canViewCommission = (userRole) => {
+  return ["manager", "admin", "vendor"].includes(userRole);
+};
+
+/**
+ * Remove commission data from response if user doesn't have permission
+ */
+const sanitizeCommissionData = (data, userRole) => {
+  if (canViewCommission(userRole)) {
+    return data; // Return as-is for authorized users
+  }
+
+  // Remove commission fields for attendants
+  const sanitized = { ...data };
+
+  if (sanitized.vendorCommission !== undefined) {
+    delete sanitized.vendorCommission;
+  }
+
+  return sanitized;
+};
+
+/**
+ * Sanitize array of rounds/summaries
+ */
+const sanitizeArrayCommissionData = (items, userRole) => {
+  if (canViewCommission(userRole)) {
+    return items; // Return as-is for authorized users
+  }
+
+  return items.map((item) => {
+    const itemObj = item.toObject ? item.toObject() : item;
+    delete itemObj.vendorCommission;
+    return itemObj;
+  });
+};
+
 // =============================================
-// CREATE ROUND
+// START ROUND (PUBLIC - ANYONE CAN START)
 // =============================================
 /**
- * POST /api/outside-catering/rounds
- * Record a completed round
+ * POST /api/outside-catering/rounds/start
+ * Start a new round with items
  */
-exports.createRound = async (req, res) => {
+exports.startRound = async (req, res) => {
   try {
-    const vendorId = req.user.id;
-    const {
-      roundNumber,
-      items,
-      returns,
-      expectedAmount,
-      returnsAmount,
-      netTotal,
-      startTime,
-      endTime,
-    } = req.body;
+    const vendorId = req.user.id; // The person starting the round
+    const { items, expectedAmount } = req.body;
 
     // Validation
     if (!items || items.length === 0) {
@@ -83,75 +115,176 @@ exports.createRound = async (req, res) => {
       });
     }
 
-    if (!roundNumber || !expectedAmount || !netTotal) {
+    if (!expectedAmount) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields",
+        error: "Expected amount is required",
       });
     }
 
     // Get current date
     const date = getCurrentDate();
 
-    // Calculate vendor commission (19%)
-    const vendorCommission = netTotal * 0.19;
+    // Check if there's already an in-progress round (for ANY vendor)
+    const existingRound = await OutsideCateringRound.findOne({
+      date,
+      status: "in-progress",
+    });
 
-    // Create the round
+    if (existingRound) {
+      return res.status(400).json({
+        success: false,
+        error: "There is already a round in progress",
+        data: sanitizeCommissionData(existingRound.toObject(), req.user.role),
+      });
+    }
+
+    // Count today's completed rounds to determine round number
+    const completedRounds = await OutsideCateringRound.countDocuments({
+      date,
+      status: "completed",
+    });
+
+    const roundNumber = completedRounds + 1;
+
+    // Create the in-progress round
     const round = new OutsideCateringRound({
       vendorId,
       date,
       roundNumber,
       items,
-      returns: returns || [],
+      returns: [],
       expectedAmount,
-      returnsAmount: returnsAmount || 0,
-      netTotal,
-      vendorCommission,
-      startTime,
-      endTime,
-      status: "completed",
+      returnsAmount: 0,
+      netTotal: expectedAmount, // Will be updated when completed
+      vendorCommission: 0, // Will be calculated when completed
+      startTime: new Date(),
+      endTime: new Date(), // Placeholder, will be updated when completed
+      status: "in-progress",
     });
 
     await round.save();
 
     res.status(201).json({
       success: true,
-      message: `Round ${roundNumber} completed successfully!`,
-      data: round,
+      message: `Round ${roundNumber} started successfully!`,
+      data: sanitizeCommissionData(round.toObject(), req.user.role),
     });
   } catch (error) {
-    console.error("Error creating round:", error);
+    console.error("Error starting round:", error);
     res.status(500).json({
       success: false,
-      error: error.message || "Failed to create round",
+      error: error.message || "Failed to start round",
     });
   }
 };
 
 // =============================================
-// GET ROUNDS
+// COMPLETE ROUND (PUBLIC - ANYONE CAN COMPLETE)
+// =============================================
+/**
+ * PUT /api/outside-catering/rounds/:roundId/complete
+ * Complete an in-progress round with returns
+ */
+exports.completeRound = async (req, res) => {
+  try {
+    const { roundId } = req.params;
+    const { returns, returnsAmount } = req.body;
+
+    // Find the in-progress round (any vendor)
+    const round = await OutsideCateringRound.findOne({
+      _id: roundId,
+      status: "in-progress",
+    });
+
+    if (!round) {
+      return res.status(404).json({
+        success: false,
+        error: "In-progress round not found",
+      });
+    }
+
+    // Update round with returns
+    round.returns = returns || [];
+    round.returnsAmount = returnsAmount || 0;
+    round.netTotal = round.expectedAmount - round.returnsAmount;
+    round.vendorCommission = round.netTotal * 0.19;
+    round.endTime = new Date();
+    round.status = "completed";
+
+    await round.save();
+
+    res.status(200).json({
+      success: true,
+      message: `Round ${round.roundNumber} completed successfully!`,
+      data: sanitizeCommissionData(round.toObject(), req.user.role),
+    });
+  } catch (error) {
+    console.error("Error completing round:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to complete round",
+    });
+  }
+};
+
+// =============================================
+// GET IN-PROGRESS ROUND (PUBLIC - ANYONE CAN VIEW)
+// =============================================
+/**
+ * GET /api/outside-catering/rounds/in-progress
+ * Get the current in-progress round
+ */
+exports.getInProgressRound = async (req, res) => {
+  try {
+    const date = getCurrentDate();
+
+    const round = await OutsideCateringRound.findOne({
+      date,
+      status: "in-progress",
+    });
+
+    res.status(200).json({
+      success: true,
+      data: round
+        ? sanitizeCommissionData(round.toObject(), req.user.role)
+        : null,
+    });
+  } catch (error) {
+    console.error("Error fetching in-progress round:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch in-progress round",
+    });
+  }
+};
+
+// =============================================
+// GET ROUNDS (PUBLIC - ANYONE CAN VIEW)
 // =============================================
 /**
  * GET /api/outside-catering/rounds?date=YYYY-MM-DD
- * Get all rounds for a specific date
+ * Get all completed rounds for a specific date
  */
 exports.getRounds = async (req, res) => {
   try {
-    const vendorId = req.user.id;
     const { date } = req.query;
 
     // Use provided date or current date
     const queryDate = date || getCurrentDate();
 
     const rounds = await OutsideCateringRound.find({
-      vendorId,
       date: queryDate,
+      status: "completed",
     }).sort({ roundNumber: 1 });
+
+    // Sanitize commission data based on user role
+    const sanitizedRounds = sanitizeArrayCommissionData(rounds, req.user.role);
 
     res.status(200).json({
       success: true,
-      data: rounds,
-      count: rounds.length,
+      data: sanitizedRounds,
+      count: sanitizedRounds.length,
     });
   } catch (error) {
     console.error("Error fetching rounds:", error);
@@ -163,7 +296,7 @@ exports.getRounds = async (req, res) => {
 };
 
 // =============================================
-// CREATE DAY SUMMARY
+// CREATE DAY SUMMARY (PUBLIC - ANYONE CAN CREATE)
 // =============================================
 /**
  * POST /api/outside-catering/day-summary
@@ -171,7 +304,7 @@ exports.getRounds = async (req, res) => {
  */
 exports.createDaySummary = async (req, res) => {
   try {
-    const vendorId = req.user.id || req.user._id;
+    const vendorId = req.user.id || req.user._id; // Person creating the summary
 
     const {
       totalRounds,
@@ -201,7 +334,6 @@ exports.createDaySummary = async (req, res) => {
 
     // Check if summary already exists for today
     const existingSummary = await OutsideCateringDaySummary.findOne({
-      vendorId,
       date,
     });
 
@@ -241,7 +373,7 @@ exports.createDaySummary = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Day summary created successfully!",
-      data: summary,
+      data: sanitizeCommissionData(summary.toObject(), req.user.role),
     });
   } catch (error) {
     console.error("Error creating day summary:", error);
@@ -253,7 +385,7 @@ exports.createDaySummary = async (req, res) => {
 };
 
 // =============================================
-// GET DAY SUMMARIES
+// GET DAY SUMMARIES (PUBLIC - ANYONE CAN VIEW)
 // =============================================
 /**
  * GET /api/outside-catering/summaries?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
@@ -261,11 +393,10 @@ exports.createDaySummary = async (req, res) => {
  */
 exports.getDaySummaries = async (req, res) => {
   try {
-    const vendorId = req.user.id;
     const { startDate, endDate } = req.query;
 
     // Build query
-    const query = { vendorId };
+    const query = {};
 
     if (startDate && endDate) {
       query.date = { $gte: startDate, $lte: endDate };
@@ -275,10 +406,16 @@ exports.getDaySummaries = async (req, res) => {
       .sort({ date: -1 })
       .limit(30);
 
+    // Sanitize commission data based on user role
+    const sanitizedSummaries = sanitizeArrayCommissionData(
+      summaries,
+      req.user.role
+    );
+
     res.status(200).json({
       success: true,
-      data: summaries,
-      count: summaries.length,
+      data: sanitizedSummaries,
+      count: sanitizedSummaries.length,
     });
   } catch (error) {
     console.error("Error fetching summaries:", error);
@@ -290,7 +427,7 @@ exports.getDaySummaries = async (req, res) => {
 };
 
 // =============================================
-// CREATE CREDIT
+// CREATE CREDIT (PUBLIC - ANYONE CAN CREATE)
 // =============================================
 /**
  * POST /api/outside-catering/credits
@@ -298,7 +435,7 @@ exports.getDaySummaries = async (req, res) => {
  */
 exports.createCredit = async (req, res) => {
   try {
-    const vendorId = req.user.id;
+    const vendorId = req.user.id; // Person creating the credit
     const { customerName, customerPhone, amount, notes } = req.body;
 
     // Validation
@@ -351,7 +488,7 @@ exports.createCredit = async (req, res) => {
 };
 
 // =============================================
-// GET CREDITS
+// GET CREDITS (PUBLIC - ANYONE CAN VIEW)
 // =============================================
 /**
  * GET /api/outside-catering/credits
@@ -359,11 +496,10 @@ exports.createCredit = async (req, res) => {
  */
 exports.getCredits = async (req, res) => {
   try {
-    const vendorId = req.user.id;
     const { status, isPaid } = req.query;
 
-    // Build query
-    const query = { vendorId };
+    // Build query (no vendorId filter - everyone sees all credits)
+    const query = {};
 
     if (status) {
       query.status = status;
@@ -398,7 +534,7 @@ exports.getCredits = async (req, res) => {
 };
 
 // =============================================
-// COLLECT CREDIT PAYMENT
+// COLLECT CREDIT PAYMENT (PUBLIC - ANYONE CAN COLLECT)
 // =============================================
 /**
  * PUT /api/outside-catering/credits/:creditId/collect
@@ -406,7 +542,6 @@ exports.getCredits = async (req, res) => {
  */
 exports.collectCredit = async (req, res) => {
   try {
-    const vendorId = req.user.id;
     const { creditId } = req.params;
     const { paymentMethod, paidAmount } = req.body;
 
@@ -418,10 +553,9 @@ exports.collectCredit = async (req, res) => {
       });
     }
 
-    // Find credit
+    // Find credit (no vendorId filter)
     const credit = await OutsideCateringCredit.findOne({
       _id: creditId,
-      vendorId,
     });
 
     if (!credit) {
@@ -465,7 +599,7 @@ exports.collectCredit = async (req, res) => {
 };
 
 // =============================================
-// GET DASHBOARD STATS
+// GET DASHBOARD STATS (PUBLIC - COMMISSION RESTRICTED)
 // =============================================
 /**
  * GET /api/outside-catering/dashboard?date=YYYY-MM-DD
@@ -473,18 +607,17 @@ exports.collectCredit = async (req, res) => {
  */
 exports.getDashboardStats = async (req, res) => {
   try {
-    const vendorId = req.user.id;
     const { date } = req.query;
     const queryDate = date || getCurrentDate();
 
-    // Get today's rounds
+    // Get today's completed rounds (all vendors)
     const rounds = await OutsideCateringRound.find({
-      vendorId,
       date: queryDate,
+      status: "completed",
     });
 
-    // Get today's credits
-    const credits = await OutsideCateringCredit.find({ vendorId });
+    // Get all credits
+    const credits = await OutsideCateringCredit.find({});
 
     // Update credit statuses
     await Promise.all(credits.map((credit) => updateCreditStatus(credit)));
@@ -528,36 +661,43 @@ exports.getDashboardStats = async (req, res) => {
     // Adjusted expected (after credits)
     const adjustedExpected = netTotal - creditAmount + creditsCollectedAmount;
 
+    // Build response
+    const responseData = {
+      date: queryDate,
+      rounds: {
+        total: totalRounds,
+        expectedAmount: totalExpected,
+        returnsAmount: totalReturns,
+        netTotal,
+      },
+      credits: {
+        givenToday: creditsGivenToday.length,
+        givenAmount: creditAmount,
+        collectedToday: creditsCollectedToday.length,
+        collectedAmount: creditsCollectedAmount,
+        outstanding: outstandingCredits.length,
+        outstandingAmount: totalOutstanding,
+        overdue: overdueCredits.length,
+        critical: criticalCredits.length,
+        criticalAmount: criticalCredits.reduce((sum, c) => sum + c.amount, 0),
+      },
+      financial: {
+        grossSales: totalExpected,
+        returns: totalReturns,
+        creditsGiven: creditAmount,
+        creditsCollected: creditsCollectedAmount,
+        netTotal: adjustedExpected,
+      },
+    };
+
+    // Only include vendorCommission if user has permission
+    if (canViewCommission(req.user.role)) {
+      responseData.financial.vendorCommission = vendorCommission;
+    }
+
     res.status(200).json({
       success: true,
-      data: {
-        date: queryDate,
-        rounds: {
-          total: totalRounds,
-          expectedAmount: totalExpected,
-          returnsAmount: totalReturns,
-          netTotal,
-        },
-        credits: {
-          givenToday: creditsGivenToday.length,
-          givenAmount: creditAmount,
-          collectedToday: creditsCollectedToday.length,
-          collectedAmount: creditsCollectedAmount,
-          outstanding: outstandingCredits.length,
-          outstandingAmount: totalOutstanding,
-          overdue: overdueCredits.length,
-          critical: criticalCredits.length,
-          criticalAmount: criticalCredits.reduce((sum, c) => sum + c.amount, 0),
-        },
-        financial: {
-          grossSales: totalExpected,
-          returns: totalReturns,
-          creditsGiven: creditAmount,
-          creditsCollected: creditsCollectedAmount,
-          netTotal: adjustedExpected,
-          vendorCommission,
-        },
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
@@ -634,7 +774,7 @@ exports.sendCreditReminders = async (req, res) => {
 };
 
 // =============================================
-// UPDATE CREDIT
+// UPDATE CREDIT (PUBLIC - ANYONE CAN UPDATE)
 // =============================================
 /**
  * PUT /api/outside-catering/credits/:creditId
@@ -642,13 +782,11 @@ exports.sendCreditReminders = async (req, res) => {
  */
 exports.updateCredit = async (req, res) => {
   try {
-    const vendorId = req.user.id;
     const { creditId } = req.params;
     const updates = req.body;
 
     const credit = await OutsideCateringCredit.findOne({
       _id: creditId,
-      vendorId,
     });
 
     if (!credit) {
@@ -682,7 +820,7 @@ exports.updateCredit = async (req, res) => {
 };
 
 // =============================================
-// DELETE CREDIT
+// DELETE CREDIT (PUBLIC - ANYONE CAN DELETE)
 // =============================================
 /**
  * DELETE /api/outside-catering/credits/:creditId
@@ -690,12 +828,10 @@ exports.updateCredit = async (req, res) => {
  */
 exports.deleteCredit = async (req, res) => {
   try {
-    const vendorId = req.user.id;
     const { creditId } = req.params;
 
     const credit = await OutsideCateringCredit.findOne({
       _id: creditId,
-      vendorId,
     });
 
     if (!credit) {
@@ -728,7 +864,7 @@ exports.deleteCredit = async (req, res) => {
 };
 
 // =============================================
-// GET VENDOR PERFORMANCE
+// GET VENDOR PERFORMANCE (MANAGERS/VENDORS ONLY)
 // =============================================
 /**
  * GET /api/outside-catering/performance
@@ -736,15 +872,13 @@ exports.deleteCredit = async (req, res) => {
  */
 exports.getVendorPerformance = async (req, res) => {
   try {
-    const vendorId = req.user.id;
-
     // Get all summaries
-    const summaries = await OutsideCateringDaySummary.find({ vendorId }).sort({
+    const summaries = await OutsideCateringDaySummary.find({}).sort({
       date: -1,
     });
 
     // Get all credits
-    const credits = await OutsideCateringCredit.find({ vendorId });
+    const credits = await OutsideCateringCredit.find({});
     const unpaidCredits = credits.filter((c) => !c.isPaid);
 
     // Calculate metrics
@@ -764,29 +898,39 @@ exports.getVendorPerformance = async (req, res) => {
     );
     const averageDailySales = totalDays > 0 ? totalSales / totalDays : 0;
 
+    // Build response with commission data only if user has permission
+    const responseData = {
+      overview: {
+        totalDays,
+        totalSales,
+        averageDailySales,
+      },
+      credits: {
+        totalGiven: credits.length,
+        totalGivenAmount: totalCreditsGiven,
+        totalPaid: credits.filter((c) => c.isPaid).length,
+        totalPaidAmount: totalCreditsPaid,
+        outstanding: unpaidCredits.length,
+        outstandingAmount: outstandingCredits,
+        recoveryRate:
+          totalCreditsGiven > 0
+            ? ((totalCreditsPaid / totalCreditsGiven) * 100).toFixed(2)
+            : 0,
+      },
+      recentSummaries: sanitizeArrayCommissionData(
+        summaries.slice(0, 7),
+        req.user.role
+      ),
+    };
+
+    // Add commission data only for authorized users
+    if (canViewCommission(req.user.role)) {
+      responseData.overview.totalCommission = totalCommission;
+    }
+
     res.status(200).json({
       success: true,
-      data: {
-        overview: {
-          totalDays,
-          totalSales,
-          totalCommission,
-          averageDailySales,
-        },
-        credits: {
-          totalGiven: credits.length,
-          totalGivenAmount: totalCreditsGiven,
-          totalPaid: credits.filter((c) => c.isPaid).length,
-          totalPaidAmount: totalCreditsPaid,
-          outstanding: unpaidCredits.length,
-          outstandingAmount: outstandingCredits,
-          recoveryRate:
-            totalCreditsGiven > 0
-              ? ((totalCreditsPaid / totalCreditsGiven) * 100).toFixed(2)
-              : 0,
-        },
-        recentSummaries: summaries.slice(0, 7),
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error("Error fetching performance:", error);

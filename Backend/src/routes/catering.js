@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const {
-  createRound,
+  startRound,
   getRounds,
   createDaySummary,
   getDaySummaries,
@@ -13,6 +13,8 @@ const {
   getDashboardStats,
   sendCreditReminders,
   getVendorPerformance,
+  completeRound,
+  getInProgressRound,
 } = require("../controllers/catering");
 const { authenticate } = require("../middleware/Auth");
 
@@ -20,15 +22,25 @@ const { authenticate } = require("../middleware/Auth");
 // ROUND ROUTES
 // =============================================
 
-// @route   POST /rounds
-// @desc    Create a new round
+// @route   POST /rounds/start
+// @desc    Start a new round
 // @access  Private (Vendor only)
-router.post("/rounds", authenticate, createRound);
+router.post("/rounds/start", authenticate, startRound);
 
 // @route   GET /rounds
 // @desc    Get all rounds for a date
 // @access  Private (Vendor only)
 router.get("/rounds", authenticate, getRounds);
+
+// @route   GET /rounds/in-progress
+// @desc    Get current in-progress round
+// @access  Private (Vendor only)
+router.get("/rounds/in-progress", authenticate, getInProgressRound);
+
+// @route   PUT /rounds/:roundId/complete
+// @desc    Complete a round
+// @access  Private (Vendor only)
+router.put("/rounds/:roundId/complete", authenticate, completeRound);
 
 // =============================================
 // DAY SUMMARY ROUTES
