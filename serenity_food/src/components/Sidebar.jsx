@@ -30,6 +30,7 @@ export const Sidebar = ({
       setUser(JSON.parse(storedUser));
     }
   }, []);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -40,81 +41,28 @@ export const Sidebar = ({
   const getNavItems = () => {
     if (!user) return [];
 
-    const commonItems = [
-      {
-        icon: Home,
-        label: "Dashboard",
-        tabName: "dashboard",
-        roles: ["manager", "shop-attendant", "vendor"],
-      },
-    ];
+    const baseItems = {
+      manager: [
+        { icon: Home, label: "Dashboard", tabName: "dashboard" },
+        { icon: ShoppingCart, label: "Walk-In Sales", tabName: "walkin" },
+        { icon: Truck, label: "Outside Catering", tabName: "catering" },
+        { icon: FileText, label: "Sales Reports", tabName: "reports" },
+        { icon: Package, label: "Inventory", tabName: "inventory" },
+        { icon: DollarSign, label: "Smart Manager", tabName: "expenses" },
+        { icon: Users, label: "User Management", tabName: "users" },
+      ],
+      "shop-attendant": [
+        { icon: Home, label: "Dashboard", tabName: "dashboard" },
+        { icon: ShoppingCart, label: "Walk-In Sales", tabName: "walkin" },
+        { icon: Truck, label: "Outside Catering", tabName: "catering" },
+      ],
+      vendor: [
+        { icon: Home, label: "Dashboard", tabName: "dashboard" },
+        { icon: Truck, label: "Outside Catering", tabName: "catering" },
+      ],
+    };
 
-    const attendantItems = [
-      {
-        icon: ShoppingCart,
-        label: "Walk-In Sales",
-        tabName: "walkin",
-        roles: ["manager", "shop-attendant"],
-      },
-      {
-        icon: Truck,
-        label: "Outside Catering",
-        tabName: "catering",
-        roles: ["manager", "shop-attendant"],
-      },
-    ];
-
-    const managerOnlyItems = [
-      {
-        icon: FileText,
-        label: "Sales Reports",
-        tabName: "reports",
-        roles: ["manager"],
-      },
-      {
-        icon: Package,
-        label: "Inventory",
-        tabName: "inventory",
-        roles: ["manager"],
-      },
-      {
-        icon: DollarSign,
-        label: "Smart Manager",
-        tabName: "expenses",
-        roles: ["manager"],
-      },
-      {
-        icon: Users,
-        label: "User Management",
-        tabName: "users",
-        roles: ["manager"],
-      },
-    ];
-
-    const vendorItems = [
-      {
-        icon: Package,
-        label: "My Products",
-        tabName: "vendor-products",
-        roles: ["vendor"],
-      },
-      {
-        icon: ShoppingCart,
-        label: "My Sales",
-        tabName: "vendor-sales",
-        roles: ["vendor"],
-      },
-    ];
-
-    const allItems = [
-      ...commonItems,
-      ...attendantItems,
-      ...managerOnlyItems,
-      ...vendorItems,
-    ];
-
-    // Filter based on user role
-    return allItems.filter((item) => item.roles.includes(user.role));
+    return baseItems[user.role] || [];
   };
 
   const navItems = getNavItems();

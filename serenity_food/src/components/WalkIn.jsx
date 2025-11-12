@@ -3,7 +3,8 @@ import { Minus, Plus, Trash2, ShoppingBag, X } from "lucide-react";
 import { PaymentModal } from "./PaymentModal";
 import { toast } from "react-toastify";
 
-const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
+const API_BASE_URL =
+  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 export const WalkIn = ({ onCreateSale }) => {
   const [cart, setCart] = useState({});

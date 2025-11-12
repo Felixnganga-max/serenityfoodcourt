@@ -13,15 +13,24 @@ import {
   AlertCircle,
   CheckCircle,
   RefreshCw,
+  Store,
+  User,
+  BarChart3,
 } from "lucide-react";
+import { OutsideCatering } from "./OutsideCatering";
+import { WalkIn } from "./WalkIn";
+import { SalesReports } from "./SalesReports";
 
-const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
+const API_BASE_URL =
+  "http://localhost:5000/serenityfoodcourt" ||
+  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 export const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState("today");
+  const [activeView, setActiveView] = useState("dashboard"); // dashboard, sales, catering, walkin
 
   useEffect(() => {
     fetchDashboardData();
@@ -119,6 +128,66 @@ export const Dashboard = () => {
     }
   };
 
+  // Navigation handler based on user role
+  const getNavigationItems = () => {
+    if (!user) return [];
+
+    const baseItems = [
+      { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+    ];
+
+    if (user.role === "manager") {
+      return [
+        ...baseItems,
+        { id: "sales", label: "Sales Reports", icon: TrendingUp },
+        { id: "catering", label: "Outside Catering", icon: Package },
+        { id: "walkin", label: "Walk-In Sales", icon: ShoppingCart },
+      ];
+    } else if (user.role === "vendor") {
+      return [
+        ...baseItems,
+        { id: "catering", label: "Outside Catering", icon: Package },
+      ];
+    } else if (user.role === "shop-attendant") {
+      return [
+        ...baseItems,
+        { id: "walkin", label: "Walk-In Sales", icon: ShoppingCart },
+      ];
+    }
+
+    return baseItems;
+  };
+
+  // Render the appropriate component based on active view
+  const renderActiveView = () => {
+    switch (activeView) {
+      case "sales":
+        return <SalesReports />;
+      case "catering":
+        return <OutsideCatering />;
+      case "walkin":
+        return <WalkIn />;
+      case "dashboard":
+      default:
+        return renderDashboard();
+    }
+  };
+
+  const renderDashboard = () => {
+    if (!user || !stats) return null;
+
+    switch (user.role) {
+      case "manager":
+        return <ManagerDashboard stats={stats} />;
+      case "shop-attendant":
+        return <ShopAttendantDashboard stats={stats} user={user} />;
+      case "vendor":
+        return <VendorDashboard stats={stats} user={user} />;
+      default:
+        return null;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
@@ -145,47 +214,73 @@ export const Dashboard = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-black p-4">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-red-900 via-black to-red-900 rounded-3xl shadow-2xl p-8 mb-6 border-2 border-red-900">
-        <div className="flex justify-between items-start flex-wrap gap-4">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">
-              Welcome back, {user.fullName}! 🔥
-            </h1>
-            <p className="text-red-300 text-lg">
-              {user.role === "manager" && "Managing Serenity Food Court"}
-              {user.role === "shop-attendant" && "Walk-In Sales Dashboard"}
-              {user.role === "vendor" && "Outside Catering Dashboard"}
-            </p>
-          </div>
+  const navigationItems = getNavigationItems();
 
-          {/* Period Selector */}
-          <div className="flex gap-2 bg-red-900/30 backdrop-blur-sm rounded-xl p-2 border border-red-900">
-            {["today", "week", "month"].map((period) => (
-              <button
-                key={period}
-                onClick={() => setSelectedPeriod(period)}
-                className={`px-6 py-2 rounded-lg font-bold transition-all ${
-                  selectedPeriod === period
-                    ? "bg-red-900 text-white shadow-lg"
-                    : "text-white hover:bg-red-900/50"
-                }`}
-              >
-                {period.charAt(0).toUpperCase() + period.slice(1)}
-              </button>
-            ))}
+  return (
+    <div className="min-h-screen bg-black">
+      {/* Navigation Header */}
+      <div className="bg-gradient-to-r from-red-900 via-black to-red-900 border-b-2 border-red-900 p-4 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-center flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="bg-white rounded-xl p-2">
+                <Store className="text-red-900" size={32} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white">
+                  Serenity Food Court
+                </h1>
+                <p className="text-red-300 capitalize">
+                  {user.role} • {user.fullName}
+                </p>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <div className="flex gap-2 bg-black/50 backdrop-blur-sm rounded-xl p-2 border border-red-900">
+              {navigationItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveView(item.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all ${
+                      activeView === item.id
+                        ? "bg-red-900 text-white shadow-lg"
+                        : "text-white hover:bg-red-900/50"
+                    }`}
+                  >
+                    <Icon size={18} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Period Selector - Only show on dashboard view */}
+            {activeView === "dashboard" && (
+              <div className="flex gap-2 bg-red-900/30 backdrop-blur-sm rounded-xl p-2 border border-red-900">
+                {["today", "week", "month"].map((period) => (
+                  <button
+                    key={period}
+                    onClick={() => setSelectedPeriod(period)}
+                    className={`px-4 py-2 rounded-lg font-bold transition-all ${
+                      selectedPeriod === period
+                        ? "bg-red-900 text-white shadow-lg"
+                        : "text-white hover:bg-red-900/50"
+                    }`}
+                  >
+                    {period.charAt(0).toUpperCase() + period.slice(1)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Role-Based Dashboard Content */}
-      {user.role === "manager" && <ManagerDashboard stats={stats} />}
-      {user.role === "shop-attendant" && (
-        <ShopAttendantDashboard stats={stats} user={user} />
-      )}
-      {user.role === "vendor" && <VendorDashboard stats={stats} user={user} />}
+      {/* Main Content */}
+      <div className="p-4">{renderActiveView()}</div>
     </div>
   );
 };
@@ -195,7 +290,7 @@ const ManagerDashboard = ({ stats }) => {
   if (!stats) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
@@ -416,7 +511,7 @@ const ShopAttendantDashboard = ({ stats, user }) => {
   const dailyWage = 550;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Personal Earnings */}
       <div className="bg-gradient-to-r from-red-900 via-black to-red-900 rounded-2xl shadow-2xl p-8 border-2 border-white">
         <div className="flex items-center gap-4 mb-4">
@@ -558,7 +653,7 @@ const VendorDashboard = ({ stats, user }) => {
   const commissionRate = 0.19; // 19%
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Commission Earnings - Hero Section */}
       <div className="bg-gradient-to-r from-red-900 via-black to-red-900 rounded-2xl shadow-2xl p-8 border-2 border-white">
         <div className="flex items-center gap-4 mb-4">

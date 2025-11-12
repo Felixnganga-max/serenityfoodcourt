@@ -17,7 +17,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-const API_BASE_URL = "http://localhost:5000/serenityfoodcourt";
+const API_BASE_URL =
+  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 // Toast notification component
 const Toast = ({ message, type, onClose }) => {
@@ -88,6 +89,70 @@ export const OutsideCatering = () => {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
+  // Add this useEffect to fetch in-progress round on component mount
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      setError("Authentication required. Please log in.");
+      showToast("❌ Please log in to continue", "error");
+      setLoading(false);
+      return;
+    }
+    fetchData();
+    fetchInProgressRound(); // Add this line
+  }, []);
+
+  // Add this new function to fetch in-progress round
+  const fetchInProgressRound = async () => {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/outside-catering/rounds/in-progress`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        // Round is in progress, restore the state
+        const inProgressRound = data.data;
+
+        // Convert items array to object format for the UI
+        const itemsObj = {};
+        inProgressRound.items.forEach((item) => {
+          itemsObj[item.menuItem] = item.quantity;
+        });
+
+        // Convert returns array to object format (if any)
+        const returnsObj = {};
+        inProgressRound.returns.forEach((returnItem) => {
+          returnsObj[returnItem.menuItem] = returnItem.quantity;
+        });
+
+        setCurrentRound({
+          items: itemsObj,
+          returns: returnsObj,
+          started: true,
+          startTime: new Date(inProgressRound.startTime),
+          roundId: inProgressRound._id, // Store the round ID
+        });
+
+        // showToast(
+        //   `✅ Resumed Round ${
+        //     inProgressRound.roundNumber
+        //   }\n💰 Expected: KSh ${inProgressRound.expectedAmount.toLocaleString()}`,
+        //   "info"
+        // );
+      }
+    } catch (err) {
+      console.error("Failed to fetch in-progress round", err);
+      // Don't show error toast, just log it
+    }
+  };
+
   const showToast = (message, type = "info") => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message, type }]);
@@ -140,6 +205,7 @@ export const OutsideCatering = () => {
         fetchRounds(token),
         fetchDashboardStats(token),
         fetchCredits(token),
+        fetchInProgressRound(), // Add this
       ]);
       showToast("✅ Data refreshed", "success");
     } catch (err) {
@@ -287,23 +353,77 @@ export const OutsideCatering = () => {
   const currentRoundNet = currentRoundExpected - currentRoundReturns;
   const currentCommission = currentRoundNet * 0.19;
 
-  const startRound = () => {
+  const startRound = async () => {
     if (Object.keys(currentRound.items).length === 0) {
       showToast("❌ Add items before starting the round!", "error");
       return;
     }
-    setCurrentRound({ ...currentRound, started: true, startTime: new Date() });
-    showToast(
-      `✅ Round ${
-        rounds.length + 1
-      } started!\n💰 Expected: KSh ${currentRoundExpected.toLocaleString()}`,
-      "success"
-    );
+
+    const token = getToken();
+    if (!token) {
+      showToast("❌ Authentication required", "error");
+      return;
+    }
+
+    try {
+      // Prepare items for API
+      const items = Object.entries(currentRound.items)
+        .map(([itemId, qty]) => {
+          const item = menuItems.find((i) => i._id === itemId);
+          if (!item) return null;
+          return {
+            menuItem: itemId,
+            name: item.name,
+            icon: item.icon || "",
+            price: item.price,
+            quantity: qty,
+            total: item.price * qty,
+          };
+        })
+        .filter(Boolean);
+
+      const expectedAmount = calculateRoundExpected();
+
+      const res = await fetch(`${API_BASE_URL}/outside-catering/rounds/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          items,
+          expectedAmount,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setCurrentRound({
+          ...currentRound,
+          started: true,
+          startTime: new Date(),
+          roundId: data.data._id, // Store the round ID
+        });
+
+        showToast(
+          `✅ Round ${
+            rounds.length + 1
+          } started!\n💰 Expected: KSh ${expectedAmount.toLocaleString()}`,
+          "success"
+        );
+      } else {
+        throw new Error(data.error || "Failed to start round");
+      }
+    } catch (error) {
+      console.error("Start round error:", error);
+      showToast("❌ Failed to start round: " + error.message, "error");
+    }
   };
 
   const completeRound = async () => {
-    if (!currentRound.started) {
-      showToast("❌ Start the round first!", "error");
+    if (!currentRound.started || !currentRound.roundId) {
+      showToast("❌ No active round found!", "error");
       return;
     }
 
@@ -318,51 +438,38 @@ export const OutsideCatering = () => {
         throw new Error("Menu items not loaded");
       }
 
-      const roundData = {
-        roundNumber: rounds.length + 1,
-        items: Object.entries(currentRound.items)
-          .map(([itemId, qty]) => {
-            const item = menuItems.find((i) => i._id === itemId);
-            if (!item) return null;
-            return {
-              menuItem: itemId,
-              name: item.name,
-              icon: item.icon || "",
-              price: item.price,
-              quantity: qty,
-              total: item.price * qty,
-            };
-          })
-          .filter(Boolean),
-        returns: Object.entries(currentRound.returns)
-          .map(([itemId, qty]) => {
-            const item = menuItems.find((i) => i._id === itemId);
-            if (!item) return null;
-            return {
-              menuItem: itemId,
-              name: item.name,
-              icon: item.icon || "",
-              price: item.price,
-              quantity: qty,
-              total: item.price * qty,
-            };
-          })
-          .filter(Boolean),
-        expectedAmount: currentRoundExpected,
-        returnsAmount: currentRoundReturns,
-        netTotal: currentRoundNet,
-        startTime: currentRound.startTime,
-        endTime: new Date(),
-      };
+      // Prepare returns data
+      const returns = Object.entries(currentRound.returns)
+        .map(([itemId, qty]) => {
+          const item = menuItems.find((i) => i._id === itemId);
+          if (!item) return null;
+          return {
+            menuItem: itemId,
+            name: item.name,
+            icon: item.icon || "",
+            price: item.price,
+            quantity: qty,
+            total: item.price * qty,
+          };
+        })
+        .filter(Boolean);
 
-      const res = await fetch(`${API_BASE_URL}/outside-catering/rounds`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(roundData),
-      });
+      const returnsAmount = calculateRoundReturns();
+
+      const res = await fetch(
+        `${API_BASE_URL}/outside-catering/rounds/${currentRound.roundId}/complete`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            returns,
+            returnsAmount,
+          }),
+        }
+      );
 
       const data = await res.json();
 
@@ -370,31 +477,32 @@ export const OutsideCatering = () => {
         // Refresh data
         await Promise.all([fetchRounds(token), fetchDashboardStats(token)]);
 
+        const netTotal = currentRoundExpected - currentRoundReturns;
+        const commission = netTotal * 0.19;
+
         // Reset current round
         setCurrentRound({
           items: {},
           returns: {},
           started: false,
           startTime: null,
+          roundId: null,
         });
         setShowReturnsModal(false);
 
         // Show success toast
         showToast(
-          `✅ Round ${
-            roundData.roundNumber
-          } completed!\n💰 Net Sales: KSh ${currentRoundNet.toLocaleString()}\n🎉 Your Commission: KSh ${currentCommission.toLocaleString()}`,
+          `✅ Round completed!\n💰 Net Sales: KSh ${netTotal.toLocaleString()}\n🎉 Your Commission: KSh ${commission.toLocaleString()}`,
           "success"
         );
       } else {
-        throw new Error(data.error || "Failed to record round");
+        throw new Error(data.error || "Failed to complete round");
       }
     } catch (error) {
       console.error("Complete round error:", error);
-      showToast("❌ Failed to record round: " + error.message, "error");
+      showToast("❌ Failed to complete round: " + error.message, "error");
     }
   };
-
   const handleAddCredit = async () => {
     if (!creditForm.name.trim() || creditForm.amount <= 0) {
       showToast("❌ Enter customer name and amount!", "error");
@@ -991,7 +1099,7 @@ export const OutsideCatering = () => {
                   <div className="bg-white rounded-lg p-2">
                     <p className="text-gray-500">Commission</p>
                     <p className="font-bold text-orange-600">
-                      KSh {round.vendorCommission.toLocaleString()}
+                      {/* KSh {round.vendorCommission.toLocaleString()} */}
                     </p>
                   </div>
                 </div>
