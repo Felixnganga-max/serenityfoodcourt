@@ -97,7 +97,7 @@ const UserManagement = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        "http://localhost:5000/serenityfoodcourt/auth/register",
+        " https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt/auth/register",
         {
           method: "POST",
           headers: {
@@ -137,7 +137,7 @@ const UserManagement = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `http://localhost:5000/serenityfoodcourt/auth/users/${userId}/status`,
+        ` https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt/auth/users/${userId}/status`,
         {
           method: "PATCH",
           headers: {
