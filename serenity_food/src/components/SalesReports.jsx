@@ -5,15 +5,13 @@ import {
   Package,
   Filter,
   DollarSign,
-  Users,
   ShoppingBag,
-  Layers,
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
 
 const API_BASE_URL =
-  "  https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
+  "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 export const SalesReports = () => {
   const [selectedDate, setSelectedDate] = useState(
@@ -26,24 +24,47 @@ export const SalesReports = () => {
   const [rawMaterialGroups, setRawMaterialGroups] = useState([]);
   const [selectedRawMaterial, setSelectedRawMaterial] = useState("all");
 
-  const token = localStorage.getItem("token") || "";
+  const getToken = () => {
+    try {
+      return localStorage.getItem("token") || "";
+    } catch (err) {
+      console.error("LocalStorage not available:", err);
+      return "";
+    }
+  };
 
   useEffect(() => {
     fetchRawMaterialGroups();
   }, []);
 
   useEffect(() => {
-    fetchReportData();
+    if (selectedDate) {
+      fetchReportData();
+    }
   }, [selectedDate]);
 
   const fetchRawMaterialGroups = async () => {
+    const token = getToken();
+    if (!token) {
+      setError("Authentication required. Please log in.");
+      return;
+    }
+
     try {
       const response = await fetch(`${API_BASE_URL}/raw-material-groups`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
       const data = await response.json();
       if (data.success) {
-        setRawMaterialGroups(data.data);
+        setRawMaterialGroups(data.data || []);
       }
     } catch (err) {
       console.error("Failed to fetch raw material groups:", err);
@@ -51,48 +72,81 @@ export const SalesReports = () => {
   };
 
   const fetchReportData = async () => {
+    const token = getToken();
+    if (!token) {
+      setError("Authentication required. Please log in.");
+      return;
+    }
+
     setLoading(true);
     setError("");
+
     try {
+      console.log("Fetching report for date:", selectedDate);
+
       const response = await fetch(
         `${API_BASE_URL}/sales/report?date=${selectedDate}`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
       );
+
+      console.log("Response status:", response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Response error:", errorText);
+
+        if (response.status === 401) {
+          throw new Error("Authentication failed. Please log in again.");
+        } else if (response.status === 403) {
+          throw new Error("You don't have permission to view sales reports.");
+        } else {
+          throw new Error(`Failed to fetch report (${response.status})`);
+        }
+      }
+
       const data = await response.json();
+      console.log("Report data received:", data);
 
       if (data.success) {
         setReportData(data.data);
+        setError("");
       } else {
         setError(data.error || "Failed to fetch report data");
       }
     } catch (err) {
-      setError("Failed to fetch report data");
-      console.error(err);
+      console.error("Fetch error:", err);
+      setError(err.message || "Failed to fetch report data");
     } finally {
       setLoading(false);
     }
   };
 
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    try {
+      return new Date(timestamp).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (err) {
+      return "Invalid time";
+    }
   };
 
   const formatCurrency = (amount) => {
-    return `KSh ${amount.toLocaleString()}`;
+    const value = Number(amount) || 0;
+    return `KSh ${value.toLocaleString()}`;
   };
 
-  // Filter items by raw material group - FIXED
   const getFilteredItems = () => {
     if (!reportData?.itemsAnalysis) return [];
     if (selectedRawMaterial === "all") return reportData.itemsAnalysis;
 
     return reportData.itemsAnalysis.filter((item) => {
-      // Check multiple possible ID formats
       const itemGroupId =
         item.rawMaterialGroup?._id ||
         item.rawMaterialGroup?.id ||
@@ -101,7 +155,6 @@ export const SalesReports = () => {
     });
   };
 
-  // Calculate grand totals for filtered items - NEW
   const getFilteredTotals = () => {
     const filteredItems = getFilteredItems();
     const totals = {
@@ -119,11 +172,6 @@ export const SalesReports = () => {
     });
 
     return totals;
-  };
-
-  const getRawMaterialSummary = () => {
-    if (!reportData?.rawMaterialAnalysis) return [];
-    return reportData.rawMaterialAnalysis;
   };
 
   if (loading && !reportData) {
@@ -217,127 +265,111 @@ export const SalesReports = () => {
               </div>
             </div>
 
-            {/* Report Type Selector */}
+            {/* Report Type Selector - REMOVED MATERIALS */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                 <Filter size={18} className="text-indigo-600" />
                 Report View
               </label>
-              <div className="grid grid-cols-4 gap-2">
-                <button
-                  onClick={() => setReportType("daily")}
-                  className={`px-4 py-3 rounded-xl font-bold transition-all ${
-                    reportType === "daily"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  Daily
-                </button>
-                <button
-                  onClick={() => setReportType("items")}
-                  className={`px-4 py-3 rounded-xl font-bold transition-all ${
-                    reportType === "items"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  Items
-                </button>
-                <button
-                  onClick={() => setReportType("materials")}
-                  className={`px-4 py-3 rounded-xl font-bold transition-all ${
-                    reportType === "materials"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  Materials
-                </button>
-                <button
-                  onClick={() => setReportType("payment")}
-                  className={`px-4 py-3 rounded-xl font-bold transition-all ${
-                    reportType === "payment"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  Payment
-                </button>
+              <div className="grid grid-cols-3 gap-2">
+                {["daily", "items", "payment"].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setReportType(type)}
+                    className={`px-4 py-3 rounded-xl font-bold transition-all capitalize ${
+                      reportType === type
+                        ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg scale-105"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
-            <div className="flex items-center gap-3 mb-2">
-              <ShoppingBag size={24} />
-              <h3 className="text-sm font-semibold opacity-90">
-                Walk-In Sales
-              </h3>
+        {reportData && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
+              <div className="flex items-center gap-3 mb-2">
+                <ShoppingBag size={24} />
+                <h3 className="text-sm font-semibold opacity-90">
+                  Walk-In Sales
+                </h3>
+              </div>
+              <p className="text-3xl font-bold mb-1">
+                {formatCurrency(summary.walkInTotal || 0)}
+              </p>
+              <p className="text-sm opacity-75">
+                {walkInSales.length} transactions
+              </p>
             </div>
-            <p className="text-3xl font-bold mb-1">
-              {formatCurrency(summary.walkInTotal || 0)}
-            </p>
-            <p className="text-sm opacity-75">
-              {walkInSales.length} transactions
-            </p>
-          </div>
 
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
-            <div className="flex items-center gap-3 mb-2">
-              <Package size={24} />
-              <h3 className="text-sm font-semibold opacity-90">
-                Catering (Paid)
-              </h3>
+            <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
+              <div className="flex items-center gap-3 mb-2">
+                <Package size={24} />
+                <h3 className="text-sm font-semibold opacity-90">
+                  Catering (Paid)
+                </h3>
+              </div>
+              <p className="text-3xl font-bold mb-1">
+                {formatCurrency(summary.cateringPaid || 0)}
+              </p>
+              <p className="text-sm opacity-75">
+                {cateringSales.filter((s) => s.isPaid).length} paid orders
+              </p>
             </div>
-            <p className="text-3xl font-bold mb-1">
-              {formatCurrency(summary.cateringPaid || 0)}
-            </p>
-            <p className="text-sm opacity-75">
-              {cateringSales.filter((s) => s.isPaid).length} orders
-            </p>
-          </div>
 
-          <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
-            <div className="flex items-center gap-3 mb-2">
-              <AlertCircle size={24} />
-              <h3 className="text-sm font-semibold opacity-90">
-                Pending Credit
-              </h3>
+            <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
+              <div className="flex items-center gap-3 mb-2">
+                <AlertCircle size={24} />
+                <h3 className="text-sm font-semibold opacity-90">
+                  Pending Credit
+                </h3>
+              </div>
+              <p className="text-3xl font-bold mb-1">
+                {formatCurrency(summary.cateringPending || 0)}
+              </p>
+              <p className="text-sm opacity-75">
+                {cateringSales.filter((s) => !s.isPaid).length} unpaid
+              </p>
             </div>
-            <p className="text-3xl font-bold mb-1">
-              {formatCurrency(summary.cateringPending || 0)}
-            </p>
-            <p className="text-sm opacity-75">
-              {cateringSales.filter((s) => !s.isPaid).length} unpaid
-            </p>
-          </div>
 
-          <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
-            <div className="flex items-center gap-3 mb-2">
-              <DollarSign size={24} />
-              <h3 className="text-sm font-semibold opacity-90">
-                Total Revenue
-              </h3>
+            <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-xl hover:scale-105 transition-transform">
+              <div className="flex items-center gap-3 mb-2">
+                <DollarSign size={24} />
+                <h3 className="text-sm font-semibold opacity-90">
+                  Total Revenue
+                </h3>
+              </div>
+              <p className="text-3xl font-bold mb-1">
+                {formatCurrency(
+                  (summary.walkInTotal || 0) + (summary.cateringPaid || 0)
+                )}
+              </p>
+              <p className="text-sm opacity-75">
+                {walkInSales.length +
+                  cateringSales.filter((s) => s.isPaid).length}{" "}
+                paid sales
+              </p>
             </div>
-            <p className="text-3xl font-bold mb-1">
-              {formatCurrency(
-                (summary.walkInTotal || 0) + (summary.cateringPaid || 0)
-              )}
-            </p>
-            <p className="text-sm opacity-75">
-              {walkInSales.length +
-                cateringSales.filter((s) => s.isPaid).length}{" "}
-              paid
-            </p>
           </div>
-        </div>
+        )}
 
         {/* Report Content */}
-        {reportType === "daily" && (
+        {!reportData && !loading && (
+          <div className="bg-white rounded-2xl shadow-xl p-12 text-center">
+            <Calendar size={64} className="mx-auto mb-4 text-gray-300" />
+            <p className="text-gray-600 text-lg font-medium">
+              Select a date and click Refresh to view sales report
+            </p>
+          </div>
+        )}
+
+        {reportType === "daily" && reportData && (
           <div className="grid lg:grid-cols-2 gap-6">
             {/* Walk-In Sales */}
             <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
@@ -385,7 +417,7 @@ export const SalesReports = () => {
                       </div>
 
                       <div className="space-y-1 mb-3">
-                        {sale.items.map((item, idx) => (
+                        {sale.items?.map((item, idx) => (
                           <div
                             key={idx}
                             className="flex justify-between text-sm text-gray-800"
@@ -400,7 +432,7 @@ export const SalesReports = () => {
                         ))}
                       </div>
 
-                      <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
                         <span
                           className={`px-3 py-1 rounded-full font-semibold ${
                             sale.paymentMethod === "mpesa"
@@ -413,13 +445,18 @@ export const SalesReports = () => {
                           {sale.paymentMethod === "mpesa"
                             ? "M-PESA"
                             : sale.paymentMethod === "split"
-                            ? `Split (M-PESA: ${formatCurrency(
-                                sale.splitPayment?.mpesa || 0
-                              )}, Cash: ${formatCurrency(
-                                sale.splitPayment?.cash || 0
-                              )})`
+                            ? `Split Payment`
                             : "Cash"}
                         </span>
+                        {sale.paymentMethod === "split" &&
+                          sale.splitPayment && (
+                            <span className="text-gray-600">
+                              M-PESA:{" "}
+                              {formatCurrency(sale.splitPayment.mpesa || 0)},
+                              Cash:{" "}
+                              {formatCurrency(sale.splitPayment.cash || 0)}
+                            </span>
+                          )}
                         {sale.mpesaCode && (
                           <span className="text-gray-500">
                             • {sale.mpesaCode}
@@ -435,15 +472,15 @@ export const SalesReports = () => {
             {/* Catering Sales */}
             <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
               <div className="flex items-center gap-3 mb-6">
-                <div className="bg-indigo-100 rounded-xl p-3">
-                  <Package className="text-indigo-600" size={24} />
+                <div className="bg-orange-100 rounded-xl p-3">
+                  <Package className="text-orange-600" size={24} />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">
-                    Catering Orders
+                    Outside Catering
                   </h3>
                   <p className="text-sm text-gray-600">
-                    {cateringSales.length} orders
+                    {cateringSales.length} sales
                   </p>
                 </div>
               </div>
@@ -451,7 +488,7 @@ export const SalesReports = () => {
               {cateringSales.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <Package size={48} className="mx-auto mb-3 text-gray-300" />
-                  <p className="font-medium">No catering orders on this date</p>
+                  <p className="font-medium">No catering sales on this date</p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
@@ -460,8 +497,8 @@ export const SalesReports = () => {
                       key={sale._id}
                       className={`p-4 rounded-xl border-2 hover:shadow-md transition-shadow ${
                         sale.isPaid
-                          ? "bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-100"
-                          : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
+                          ? "bg-gradient-to-r from-orange-50 to-red-50 border-orange-100"
+                          : "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200"
                       }`}
                     >
                       <div className="flex justify-between items-start mb-3">
@@ -470,7 +507,7 @@ export const SalesReports = () => {
                             {formatTime(sale.timestamp)}
                           </span>
                           <p className="text-xs font-semibold text-gray-600 mt-1">
-                            {sale.customerName || sale.vendorName || "N/A"}
+                            {sale.vendorName || sale.customerName || "Vendor"}
                           </p>
                           <p className="text-xs text-gray-500">
                             By: {sale.recordedBy?.fullName || "N/A"}
@@ -479,7 +516,7 @@ export const SalesReports = () => {
                         <div className="text-right">
                           <span
                             className={`text-xl font-bold ${
-                              sale.isPaid ? "text-indigo-600" : "text-amber-600"
+                              sale.isPaid ? "text-orange-600" : "text-amber-600"
                             }`}
                           >
                             {formatCurrency(sale.totalAmount)}
@@ -495,7 +532,7 @@ export const SalesReports = () => {
                       </div>
 
                       <div className="space-y-1 mb-3">
-                        {sale.items.map((item, idx) => (
+                        {sale.items?.map((item, idx) => (
                           <div
                             key={idx}
                             className="flex justify-between text-sm text-gray-800"
@@ -510,21 +547,8 @@ export const SalesReports = () => {
                         ))}
                       </div>
 
-                      {sale.returnedItems?.length > 0 && (
-                        <div className="mb-3 p-2 bg-red-50 rounded-lg border border-red-200">
-                          <p className="text-xs font-semibold text-red-700 mb-1">
-                            Returned Items:
-                          </p>
-                          {sale.returnedItems.map((ret, idx) => (
-                            <p key={idx} className="text-xs text-red-600">
-                              • {ret.item} ({ret.quantity}) - {ret.reason}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-
                       {sale.isPaid && (
-                        <div className="flex items-center gap-2 text-xs">
+                        <div className="flex items-center gap-2 text-xs flex-wrap">
                           <span
                             className={`px-3 py-1 rounded-full font-semibold ${
                               sale.paymentMethod === "mpesa"
@@ -537,13 +561,18 @@ export const SalesReports = () => {
                             {sale.paymentMethod === "mpesa"
                               ? "M-PESA"
                               : sale.paymentMethod === "split"
-                              ? `Split (M-PESA: ${formatCurrency(
-                                  sale.splitPayment?.mpesa || 0
-                                )}, Cash: ${formatCurrency(
-                                  sale.splitPayment?.cash || 0
-                                )})`
+                              ? "Split Payment"
                               : "Cash"}
                           </span>
+                          {sale.paymentMethod === "split" &&
+                            sale.splitPayment && (
+                              <span className="text-gray-600">
+                                M-PESA:{" "}
+                                {formatCurrency(sale.splitPayment.mpesa || 0)},
+                                Cash:{" "}
+                                {formatCurrency(sale.splitPayment.cash || 0)}
+                              </span>
+                            )}
                           {sale.mpesaCode && (
                             <span className="text-gray-500">
                               • {sale.mpesaCode}
@@ -559,9 +588,9 @@ export const SalesReports = () => {
           </div>
         )}
 
-        {reportType === "items" && (
+        {reportType === "items" && reportData && (
           <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
               <div className="flex items-center gap-3">
                 <div className="bg-purple-100 rounded-xl p-3">
                   <Package className="text-purple-600" size={24} />
@@ -577,26 +606,25 @@ export const SalesReports = () => {
                 </div>
               </div>
 
-              {/* Raw Material Filter */}
-              <select
-                value={selectedRawMaterial}
-                onChange={(e) => setSelectedRawMaterial(e.target.value)}
-                className="px-4 py-2 border-2 border-gray-300 rounded-xl font-semibold focus:border-purple-500 focus:ring-4 focus:ring-purple-200 focus:outline-none"
-              >
-                <option value="all">All Items</option>
-                {rawMaterialGroups.map((group) => (
-                  <option key={group._id} value={group._id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
+              {rawMaterialGroups.length > 0 && (
+                <select
+                  value={selectedRawMaterial}
+                  onChange={(e) => setSelectedRawMaterial(e.target.value)}
+                  className="px-4 py-2 border-2 border-gray-300 rounded-xl font-semibold focus:border-purple-500 focus:ring-4 focus:ring-purple-200 focus:outline-none"
+                >
+                  <option value="all">All Items</option>
+                  {rawMaterialGroups.map((group) => (
+                    <option key={group._id} value={group._id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            {/* Grand Total Card - NEW */}
             {selectedRawMaterial !== "all" && getFilteredItems().length > 0 && (
               <div className="mb-6 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-2xl p-6 text-white">
-                <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
-                  <Layers size={20} />
+                <h4 className="text-lg font-bold mb-4">
                   {
                     rawMaterialGroups.find((g) => g._id === selectedRawMaterial)
                       ?.name
@@ -639,9 +667,9 @@ export const SalesReports = () => {
               </div>
             ) : (
               <div className="grid md:grid-cols-2 gap-4">
-                {getFilteredItems().map((item) => (
+                {getFilteredItems().map((item, index) => (
                   <div
-                    key={item.name}
+                    key={`${item.name}-${index}`}
                     className="border-2 border-purple-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow"
                   >
                     <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-5">
@@ -650,7 +678,7 @@ export const SalesReports = () => {
                           <h4 className="font-bold text-lg text-gray-900 mb-2">
                             {item.name}
                           </h4>
-                          {item.rawMaterialGroup && (
+                          {item.rawMaterialGroup?.name && (
                             <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold mb-3">
                               {item.rawMaterialGroup.name}
                             </span>
@@ -661,22 +689,22 @@ export const SalesReports = () => {
                                 Walk-In
                               </p>
                               <p className="text-lg font-bold text-blue-600">
-                                {item.walkInQty}
+                                {item.walkInQty || 0}
                               </p>
                             </div>
-                            <div className="bg-indigo-100 rounded-lg p-2">
+                            <div className="bg-orange-100 rounded-lg p-2">
                               <p className="text-xs text-gray-600 font-medium">
                                 Catering
                               </p>
-                              <p className="text-lg font-bold text-indigo-600">
-                                {item.cateringQty}
+                              <p className="text-lg font-bold text-orange-600">
+                                {item.cateringQty || 0}
                               </p>
                             </div>
                           </div>
                         </div>
                         <div className="text-right ml-4">
                           <p className="text-3xl font-bold text-purple-600">
-                            {item.totalQuantity}
+                            {item.totalQuantity || 0}
                           </p>
                           <p className="text-xs text-gray-500 mb-2">
                             units sold
@@ -694,72 +722,7 @@ export const SalesReports = () => {
           </div>
         )}
 
-        {reportType === "materials" && (
-          <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="bg-orange-100 rounded-xl p-3">
-                <Layers className="text-orange-600" size={24} />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900">
-                  Raw Material Groups Analysis
-                </h3>
-                <p className="text-sm text-gray-600">
-                  {getRawMaterialSummary().length} material groups
-                </p>
-              </div>
-            </div>
-
-            {getRawMaterialSummary().length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <Layers size={48} className="mx-auto mb-3 text-gray-300" />
-                <p className="font-medium">No material data available</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {getRawMaterialSummary().map((group) => (
-                  <div
-                    key={group.name}
-                    className="border-2 border-orange-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow"
-                  >
-                    <div className="bg-gradient-to-r from-orange-50 to-red-50 p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex-1">
-                          <h4 className="font-bold text-2xl text-gray-900 mb-3">
-                            {group.name}
-                          </h4>
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {group.items.map((itemName, idx) => (
-                              <span
-                                key={idx}
-                                className="px-3 py-1 bg-white rounded-full text-xs font-semibold text-gray-700 border border-orange-200"
-                              >
-                                {itemName}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="text-right ml-4">
-                          <p className="text-4xl font-bold text-orange-600 mb-1">
-                            {group.totalQuantity}
-                          </p>
-                          <p className="text-xs text-gray-500 mb-2">
-                            units sold
-                          </p>
-                          <p className="text-xl font-bold text-green-600">
-                            {formatCurrency(group.totalRevenue)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {reportType === "payment" && (
+        {reportType === "payment" && reportData && (
           <div className="grid md:grid-cols-2 gap-6">
             {/* Payment Breakdown */}
             <div className="bg-white rounded-2xl shadow-xl p-6 border border-gray-100">
@@ -793,9 +756,6 @@ export const SalesReports = () => {
                       <p className="text-2xl font-bold text-green-600">
                         {formatCurrency(paymentBreakdown.mpesa || 0)}
                       </p>
-                      <p className="text-xs text-gray-500">
-                        {paymentBreakdown.mpesaCount || 0} transactions
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -819,36 +779,32 @@ export const SalesReports = () => {
                       <p className="text-2xl font-bold text-gray-600">
                         {formatCurrency(paymentBreakdown.cash || 0)}
                       </p>
-                      <p className="text-xs text-gray-500">
-                        {paymentBreakdown.cashCount || 0} transactions
-                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center">
-                        <span className="text-2xl">🔀</span>
+                {paymentBreakdown.credit > 0 && (
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 border-2 border-amber-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center">
+                          <span className="text-2xl">⏰</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-600">
+                            Credit
+                          </p>
+                          <p className="text-xs text-gray-500">Unpaid orders</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-gray-600">
-                          Split Payment
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-amber-600">
+                          {formatCurrency(paymentBreakdown.credit || 0)}
                         </p>
-                        <p className="text-xs text-gray-500">M-PESA + Cash</p>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-purple-600">
-                        {formatCurrency(paymentBreakdown.split || 0)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {paymentBreakdown.splitCount || 0} transactions
-                      </p>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border-2 border-blue-200">
                   <div className="flex items-center justify-between">
@@ -861,7 +817,7 @@ export const SalesReports = () => {
                           Total Collected
                         </p>
                         <p className="text-xs text-gray-500">
-                          All payment methods
+                          All paid methods
                         </p>
                       </div>
                     </div>
@@ -869,15 +825,8 @@ export const SalesReports = () => {
                       <p className="text-3xl font-bold text-blue-600">
                         {formatCurrency(
                           (paymentBreakdown.mpesa || 0) +
-                            (paymentBreakdown.cash || 0) +
-                            (paymentBreakdown.split || 0)
+                            (paymentBreakdown.cash || 0)
                         )}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {(paymentBreakdown.mpesaCount || 0) +
-                          (paymentBreakdown.cashCount || 0) +
-                          (paymentBreakdown.splitCount || 0)}{" "}
-                        total transactions
                       </p>
                     </div>
                   </div>
@@ -911,7 +860,7 @@ export const SalesReports = () => {
                         ((paymentBreakdown.mpesa || 0) /
                           ((paymentBreakdown.mpesa || 0) +
                             (paymentBreakdown.cash || 0) +
-                            (paymentBreakdown.split || 0) || 1)) *
+                            (paymentBreakdown.credit || 0) || 1)) *
                         100
                       ).toFixed(1)}
                       %
@@ -921,18 +870,21 @@ export const SalesReports = () => {
                     <div
                       className="bg-gradient-to-r from-green-500 to-emerald-600 h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500"
                       style={{
-                        width: `${
+                        width: `${Math.max(
+                          5,
                           ((paymentBreakdown.mpesa || 0) /
                             ((paymentBreakdown.mpesa || 0) +
                               (paymentBreakdown.cash || 0) +
-                              (paymentBreakdown.split || 0) || 1)) *
-                          100
-                        }%`,
+                              (paymentBreakdown.credit || 0) || 1)) *
+                            100
+                        )}%`,
                       }}
                     >
-                      <span className="text-xs font-bold text-white">
-                        {formatCurrency(paymentBreakdown.mpesa || 0)}
-                      </span>
+                      {paymentBreakdown.mpesa > 0 && (
+                        <span className="text-xs font-bold text-white">
+                          {formatCurrency(paymentBreakdown.mpesa || 0)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -948,7 +900,7 @@ export const SalesReports = () => {
                         ((paymentBreakdown.cash || 0) /
                           ((paymentBreakdown.mpesa || 0) +
                             (paymentBreakdown.cash || 0) +
-                            (paymentBreakdown.split || 0) || 1)) *
+                            (paymentBreakdown.credit || 0) || 1)) *
                         100
                       ).toFixed(1)}
                       %
@@ -958,58 +910,64 @@ export const SalesReports = () => {
                     <div
                       className="bg-gradient-to-r from-gray-500 to-slate-600 h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500"
                       style={{
-                        width: `${
+                        width: `${Math.max(
+                          5,
                           ((paymentBreakdown.cash || 0) /
                             ((paymentBreakdown.mpesa || 0) +
                               (paymentBreakdown.cash || 0) +
-                              (paymentBreakdown.split || 0) || 1)) *
-                          100
-                        }%`,
+                              (paymentBreakdown.credit || 0) || 1)) *
+                            100
+                        )}%`,
                       }}
                     >
-                      <span className="text-xs font-bold text-white">
-                        {formatCurrency(paymentBreakdown.cash || 0)}
-                      </span>
+                      {paymentBreakdown.cash > 0 && (
+                        <span className="text-xs font-bold text-white">
+                          {formatCurrency(paymentBreakdown.cash || 0)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Split Bar */}
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-semibold text-gray-700">
-                      Split
-                    </span>
-                    <span className="text-sm font-bold text-purple-600">
-                      {(
-                        ((paymentBreakdown.split || 0) /
-                          ((paymentBreakdown.mpesa || 0) +
-                            (paymentBreakdown.cash || 0) +
-                            (paymentBreakdown.split || 0) || 1)) *
-                        100
-                      ).toFixed(1)}
-                      %
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-purple-500 to-pink-600 h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500"
-                      style={{
-                        width: `${
-                          ((paymentBreakdown.split || 0) /
+                {/* Credit Bar */}
+                {paymentBreakdown.credit > 0 && (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-semibold text-gray-700">
+                        Credit (Unpaid)
+                      </span>
+                      <span className="text-sm font-bold text-amber-600">
+                        {(
+                          ((paymentBreakdown.credit || 0) /
                             ((paymentBreakdown.mpesa || 0) +
                               (paymentBreakdown.cash || 0) +
-                              (paymentBreakdown.split || 0) || 1)) *
+                              (paymentBreakdown.credit || 0) || 1)) *
                           100
-                        }%`,
-                      }}
-                    >
-                      <span className="text-xs font-bold text-white">
-                        {formatCurrency(paymentBreakdown.split || 0)}
+                        ).toFixed(1)}
+                        %
                       </span>
                     </div>
+                    <div className="w-full bg-gray-200 rounded-full h-6 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-amber-500 to-orange-600 h-full rounded-full flex items-center justify-end pr-3 transition-all duration-500"
+                        style={{
+                          width: `${Math.max(
+                            5,
+                            ((paymentBreakdown.credit || 0) /
+                              ((paymentBreakdown.mpesa || 0) +
+                                (paymentBreakdown.cash || 0) +
+                                (paymentBreakdown.credit || 0) || 1)) *
+                              100
+                          )}%`,
+                        }}
+                      >
+                        <span className="text-xs font-bold text-white">
+                          {formatCurrency(paymentBreakdown.credit || 0)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Summary Stats */}
@@ -1017,27 +975,25 @@ export const SalesReports = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl">
                     <p className="text-xs font-semibold text-gray-600 mb-1">
-                      Avg Transaction
+                      Total Paid
                     </p>
                     <p className="text-xl font-bold text-indigo-600">
                       {formatCurrency(
-                        ((paymentBreakdown.mpesa || 0) +
-                          (paymentBreakdown.cash || 0) +
-                          (paymentBreakdown.split || 0)) /
-                          ((paymentBreakdown.mpesaCount || 0) +
-                            (paymentBreakdown.cashCount || 0) +
-                            (paymentBreakdown.splitCount || 0) || 1)
+                        (paymentBreakdown.mpesa || 0) +
+                          (paymentBreakdown.cash || 0)
                       )}
                     </p>
                   </div>
                   <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl">
                     <p className="text-xs font-semibold text-gray-600 mb-1">
-                      Total Transactions
+                      Total + Credit
                     </p>
                     <p className="text-xl font-bold text-green-600">
-                      {(paymentBreakdown.mpesaCount || 0) +
-                        (paymentBreakdown.cashCount || 0) +
-                        (paymentBreakdown.splitCount || 0)}
+                      {formatCurrency(
+                        (paymentBreakdown.mpesa || 0) +
+                          (paymentBreakdown.cash || 0) +
+                          (paymentBreakdown.credit || 0)
+                      )}
                     </p>
                   </div>
                 </div>
