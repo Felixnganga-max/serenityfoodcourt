@@ -22,7 +22,6 @@ import { WalkIn } from "./WalkIn";
 import { SalesReports } from "./SalesReports";
 
 const API_BASE_URL =
-  "http://localhost:5000/serenityfoodcourt" ||
   "https://serenityfoodcourt-t8j7.vercel.app/serenityfoodcourt";
 
 export const Dashboard = () => {
