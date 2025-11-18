@@ -248,25 +248,6 @@ export const Dashboard = () => {
                 );
               })}
             </div>
-
-            {/* Period Selector */}
-            {activeView === "dashboard" && (
-              <div className="flex gap-2 w-full sm:w-auto">
-                {["today", "week", "month"].map((period) => (
-                  <button
-                    key={period}
-                    onClick={() => setSelectedPeriod(period)}
-                    className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                      selectedPeriod === period
-                        ? "bg-indigo-600 text-white"
-                        : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
-                    }`}
-                  >
-                    {period.charAt(0).toUpperCase() + period.slice(1)}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>
